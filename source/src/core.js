@@ -91,7 +91,23 @@
   ];
   const PERK = Object.fromEntries(PERKS.map(p => [p.id, p]));
 
-  function newRide() { return { lvl: 0, cap: 0, spd: 0, queue: 0 }; }
+  // ---------- Ride managers ----------
+  const MANAGERS = [
+    { name: 'Operator', desc: 'Tickets ×2', cost: 300 },
+    { name: 'Supervisor', desc: '+50% riders', cost: 3e4 },
+    { name: 'Showrunner', desc: 'Tickets ×2 and fun ×1.5', cost: 3e6 },
+  ];
+
+  // ---------- Decorations ----------
+  const DECOR = [
+    { id: 'flowers', name: 'Flower beds', desc: '+3% fun on every ride', base: 150, growth: 1.6 },
+    { id: 'lamps', name: 'Lamp posts', desc: 'Guests queue 5 s longer happily', base: 800, growth: 1.9 },
+    { id: 'fountain', name: 'Fountains', desc: '+8% fun on every ride', base: 6000, growth: 2.3 },
+    { id: 'statue', name: 'Mascot statues', desc: '+10% guest arrivals', base: 1.2e5, growth: 3 },
+  ];
+  const DEC = Object.fromEntries(DECOR.map(d => [d.id, d]));
+
+  function newRide() { return { lvl: 0, cap: 0, spd: 0, queue: 0, mgr: 0 }; }
 
   function newState(keep) {
     const s = {
@@ -108,6 +124,9 @@
       ticketsEarned: 0,     // tickets ever earned from selling parks
       ticketsSpent: 0,
       perks: { seed: 0, fame: 0, thrift: 0, patience: 0 },
+      decor: { flowers: 0, lamps: 0, fountain: 0, statue: 0 },
+      goals: [],
+      goalsDone: 0,
       parkNumber: 1,
       totalVisitors: 0,
       runVisitors: 0,
@@ -120,7 +139,7 @@
       created: Date.now(),
     };
     if (keep) {
-      for (const k of ['lifetimeEarned', 'ticketsEarned', 'ticketsSpent', 'totalVisitors', 'bestIncome', 'created']) s[k] = keep[k];
+      for (const k of ['lifetimeEarned', 'ticketsEarned', 'ticketsSpent', 'totalVisitors', 'bestIncome', 'created', 'goalsDone']) s[k] = keep[k];
       s.perks = Object.assign({}, s.perks, keep.perks);
       s.parkNumber = (keep.parkNumber || 1) + 1;
       s.cash = 15 + seedCash(s.perks.seed);
@@ -138,6 +157,8 @@
     s.park = Object.assign(newState().park, raw.park || {});
     s.perks = Object.assign(newState().perks, raw.perks || {});
     s.rate = Object.assign(newState().rate, raw.rate || {});
+    s.decor = Object.assign(newState().decor, raw.decor || {});
+    if (!Array.isArray(s.goals)) s.goals = [];
     if (!Array.isArray(s.rides) || !s.rides.length) s.rides = [newRide()];
     s.rides = s.rides.map(r => Object.assign(newRide(), r));
     if (!Array.isArray(s.effects)) s.effects = [];
@@ -152,10 +173,11 @@
   function globals(s) {
     const t = s.ticketsEarned; // every ticket ever earned counts, spent or not
     return {
-      incomeMult: 1 + 0.03 * t,
-      arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t),
+      incomeMult: (1 + 0.03 * t) * (hasEffect(s, 'boost') ? 2 : 1),
+      arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t) * (1 + 0.1 * s.decor.statue),
+      decorFun: 1 + 0.03 * s.decor.flowers + 0.08 * s.decor.fountain,
       crewMult: 1 + 0.1 * s.park.crew,
-      tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience,
+      tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience + 5 * s.decor.lamps,
       capacity: Math.floor(60 * Math.pow(1.6, s.park.land)),
       foodRate: 0.04 * (1 - Math.pow(0.93, s.park.food)),
       costMult: Math.pow(0.95, s.perks.thrift),
@@ -169,9 +191,9 @@
     const m = milestonesPassed(r.lvl);
     const heat = d.water && hasEffect(s, 'heat');
     return {
-      fun: d.fun0 * r.lvl * Math.pow(1.5, m) * (heat ? 3 : 1),
-      price: d.price0 * (1 + 0.15 * (r.lvl - 1)) * Math.pow(2, m) * g.incomeMult,
-      throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.02 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * g.crewMult,
+      fun: d.fun0 * r.lvl * Math.pow(1.5, m) * (heat ? 3 : 1) * g.decorFun * (r.mgr >= 3 ? 1.5 : 1),
+      price: d.price0 * (1 + 0.15 * (r.lvl - 1)) * Math.pow(2, m) * g.incomeMult * (r.mgr >= 1 ? 2 : 1) * (r.mgr >= 3 ? 2 : 1),
+      throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.02 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * g.crewMult * (r.mgr >= 2 ? 1.5 : 1),
     };
   }
 
@@ -220,6 +242,11 @@
     const r = s.rides[i];
     return r.spd >= MAX_SPEED ? Infinity : rideDef(i).cost0 * 10 * Math.pow(SPEED_GROWTH, r.spd) * globals(s).costMult;
   }
+  function managerCost(s, i) {
+    const r = s.rides[i];
+    return r.mgr >= MANAGERS.length ? Infinity : rideDef(i).cost0 * MANAGERS[r.mgr].cost * globals(s).costMult;
+  }
+  function decorCost(s, id) { return DEC[id].base * Math.pow(DEC[id].growth, s.decor[id]); }
   function parkCost(s, id) {
     const u = UPG[id], l = s.park[id];
     return u.max !== undefined && l >= u.max ? Infinity : u.base * Math.pow(u.growth, l);
@@ -242,12 +269,77 @@
   }
   function buySeats(s, i) { if (!s.rides[i].lvl || !spend(s, seatCost(s, i))) return false; s.rides[i].cap++; return true; }
   function buySpeed(s, i) { if (!s.rides[i].lvl || !spend(s, speedCost(s, i))) return false; s.rides[i].spd++; return true; }
+  function buyManager(s, i) { if (!s.rides[i].lvl || !spend(s, managerCost(s, i))) return false; s.rides[i].mgr++; return true; }
+  function buyDecor(s, id) { if (!spend(s, decorCost(s, id))) return false; s.decor[id]++; return true; }
   function buyPark(s, id) { if (!spend(s, parkCost(s, id))) return false; s.park[id]++; return true; }
   function buyPerk(s, id) {
     const c = perkCost(s, id);
     if (!(c <= tickets(s))) return false;
     s.ticketsSpent += c; s.perks[id]++;
     return true;
+  }
+
+  // ---------- Goals ----------
+  // Three short goals are always on offer; each is built from where the park is right now.
+  function nice(x) {
+    const p = Math.pow(10, Math.floor(Math.log10(Math.max(1, x))));
+    for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= x) return m * p;
+    return 10 * p;
+  }
+  function builtIdx(s) { const a = []; s.rides.forEach((r, i) => { if (r.lvl) a.push(i); }); return a; }
+  function makeGoal(s, rnd) {
+    const built = builtIdx(s);
+    const have = new Set(s.goals.map(g => g.type + ':' + (g.i ?? g.id ?? '')));
+    const opts = [];
+    const add = (w, g) => { if (!have.has(g.type + ':' + (g.i ?? g.id ?? ''))) opts.push([w, g]); };
+    const next = s.rides.length - 1;
+    if (!s.rides[next].lvl) add(3, { type: 'build', i: next });
+    for (const i of built) add(1.2, { type: 'level', i, target: nextMilestone(s.rides[i].lvl) });
+    if (built.length) add(2, { type: 'guests', target: nice(Math.max(15, s.inPark * 1.5)) });
+    add(2, { type: 'earn', target: nice(Math.max(200, s.runEarned * 2.5)) });
+    if (built.length) add(1, { type: 'land', target: s.park.land + 1 });
+    const d = DECOR[Math.floor(rnd() * DECOR.length)];
+    if (s.runEarned > d.base * 3) add(1, { type: 'decor', id: d.id, target: s.decor[d.id] + 1 });
+    const mi = built.find(i => s.rides[i].mgr < MANAGERS.length && s.runEarned > managerCost(s, i) * 0.3);
+    if (mi !== undefined) add(1.5, { type: 'manager', i: mi, target: s.rides[mi].mgr + 1 });
+    if (!opts.length) return { type: 'earn', target: nice(Math.max(200, s.runEarned * 4)) };
+    let x = rnd() * opts.reduce((a, o) => a + o[0], 0);
+    for (const [w, g] of opts) if ((x -= w) <= 0) return g;
+    return opts[0][1];
+  }
+  function goalInfo(s, g) {
+    const r = g.i !== undefined ? s.rides[g.i] : null;
+    const name = g.i !== undefined ? rideDef(g.i).name : '';
+    switch (g.type) {
+      case 'build': return { label: 'Build the ' + name, value: r && r.lvl ? 1 : 0, target: 1 };
+      case 'level': return { label: `${name} to Lv ${g.target}`, value: r ? r.lvl : 0, target: g.target };
+      case 'guests': return { label: `Have ${fmt(g.target)} guests in the park`, value: s.inPark, target: g.target };
+      case 'earn': return { label: `Earn ${money(g.target)} in this park`, value: s.runEarned, target: g.target };
+      case 'land': return { label: 'Buy more land', value: s.park.land, target: g.target };
+      case 'decor': return { label: 'Add ' + DEC[g.id].name.toLowerCase().replace(/s$/, ''), value: s.decor[g.id], target: g.target };
+      case 'manager': return { label: `Hire a ${MANAGERS[g.target - 1].name.toLowerCase()} for the ${name}`, value: r ? r.mgr : 0, target: g.target };
+    }
+    return { label: '', value: 1, target: 1 };
+  }
+  // Fills the goal list and pays out finished goals. Every 5th goal also starts a 5-minute ×2 income boost.
+  function checkGoals(s, rnd) {
+    const done = [];
+    s.goals = s.goals.filter(g => g.i === undefined || g.i < s.rides.length);
+    for (let k = 0; k < s.goals.length; k++) {
+      const info = goalInfo(s, s.goals[k]);
+      if (info.value >= info.target) {
+        const inc = s.rate.rides + s.rate.gate + s.rate.food;
+        const prize = Math.max(50, inc * 120, s.runEarned * 0.02);
+        s.cash += prize; s.runEarned += prize; s.lifetimeEarned += prize;
+        s.goalsDone++;
+        const boost = s.goalsDone % 5 === 0;
+        if (boost) s.effects.push({ type: 'boost', until: s.time + 300 });
+        done.push({ label: info.label, prize, boost });
+        s.goals.splice(k, 1); k--;
+      }
+    }
+    while (s.goals.length < 3) s.goals.push(makeGoal(s, rnd));
+    return done;
   }
 
   function ticketsTotalFor(lifetime) { return Math.floor(Math.sqrt(Math.max(0, lifetime) / TICKET_SCALE)); }
@@ -445,7 +537,8 @@
   }
 
   root.Joyland = {
-    STAY, RIDE_EVERY, MAX_SPEED, PARK_UPGRADES, PERKS, EVENTS,
+    STAY, RIDE_EVERY, MAX_SPEED, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, DECOR,
+    managerCost, decorCost, buyManager, buyDecor, checkGoals, goalInfo,
     rideDef, milestonesPassed, nextMilestone, newState, migrate, globals, rideStats, snapshot, priceLabel,
     levelCost, maxLevels, seatCost, speedCost, parkCost, perkCost, seedCash,
     buyLevels, buySeats, buySpeed, buyPark, buyPerk, tickets, pendingTickets, ticketsTotalFor, sellPark,

@@ -128,7 +128,18 @@
       if (Math.abs(x - W / 2) < 70) continue;
       trees.push({ x, y, r: 9 + r01() * 9 });
     }
-    L = { W, H, cols, pad, gap, top, plotW, plotH, rows, plots, vcorr, hcorr, gate, dpr, slots, bottomY, trees, viewH };
+    // Spots for decorations: empty lots in the grid first, then the lawn by the entrance.
+    const spots = [];
+    for (let k = slots; k < rows * cols; k++) {
+      const r = Math.floor(k / cols), c = k % cols;
+      const x = pad + c * (plotW + gap), y = top + r * (plotH + gap);
+      for (const [fx, fy] of [[0.3, 0.3], [0.7, 0.7], [0.7, 0.3], [0.3, 0.7]]) spots.push([x + plotW * fx, y + plotH * fy]);
+    }
+    for (let y = bottomY + 24; y < H - 24; y += 34)
+      for (let x = 24; x < W - 20; x += 40) if (Math.abs(x - W / 2) > 78) spots.push([x + ((y / 34) % 2) * 12, y]);
+    const lampSpots = [];
+    for (const y of hcorr) for (const x of vcorr) lampSpots.push([x, y]);
+    L = { W, H, cols, pad, gap, top, plotW, plotH, rows, plots, vcorr, hcorr, gate, dpr, slots, bottomY, trees, viewH, spots, lampSpots };
     for (const sp of sprites) { sp.x = Math.min(sp.x, W); sp.y = Math.min(sp.y, H); }
   }
 
@@ -151,6 +162,7 @@
     }
     const p = L.plots[i];
     sp.state = 'walk';
+    sp.ride = i;
     sp.speed = 38 + rnd() * 26;
     routeTo(sp, p.x + 8 + rnd() * (p.w - 16), p.qy + (rnd() - 0.5) * 7);
   }
@@ -232,6 +244,83 @@
     ctx.globalAlpha = 1;
   }
 
+  function drawDecor() {
+    const d = S.decor;
+    // Lamp posts at path crossings
+    const nl = Math.min(d.lamps, L.lampSpots.length);
+    for (let k = 0; k < nl; k++) {
+      const [x, y] = L.lampSpots[(k * 7) % L.lampSpots.length];
+      const glow = ctx.createRadialGradient(x, y - 8, 1, x, y - 8, 18);
+      glow.addColorStop(0, 'rgba(255,214,120,.55)'); glow.addColorStop(1, 'rgba(255,214,120,0)');
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y - 8, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2b3157'; ctx.fillRect(x - 1, y - 8, 2, 10);
+      ctx.fillStyle = '#ffe3a0'; ctx.beginPath(); ctx.arc(x, y - 9, 2.6, 0, Math.PI * 2); ctx.fill();
+    }
+    const items = [];
+    for (let k = 0; k < Math.min(d.fountain, 6); k++) items.push('fountain');
+    for (let k = 0; k < Math.min(d.statue, 6); k++) items.push('statue');
+    for (let k = 0; k < Math.min(d.flowers, 40); k++) items.push('flowers');
+    const n = Math.min(items.length, L.spots.length);
+    for (let k = 0; k < n; k++) {
+      const [x, y] = L.spots[k];
+      const kind = items[k];
+      if (kind === 'fountain') {
+        ctx.fillStyle = '#7d84ad'; ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3d9be0'; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+        for (let j = 0; j < 6; j++) {
+          const a = j / 6 * Math.PI * 2 + animT * 1.5, r = 3 + ((animT * 6 + j) % 5);
+          ctx.fillStyle = 'rgba(220,240,255,.85)'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * r, y + Math.sin(a) * r, 1.3, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = '#e8f6ff'; ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+      } else if (kind === 'statue') {
+        ctx.fillStyle = '#6b6f94'; ctx.fillRect(x - 7, y - 2, 14, 9);
+        ctx.save(); ctx.shadowColor = C.gold; ctx.shadowBlur = 10;
+        ctx.fillStyle = C.gold; ctx.beginPath(); ctx.arc(x, y - 9, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x - 4, y - 15, 2.4, 0, Math.PI * 2); ctx.arc(x + 4, y - 15, 2.4, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#2f6b4f'; ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
+        const cols = ['#ff7ccf', '#ffd54a', '#ff5d73', '#a98bff', '#ffffff'];
+        for (let j = 0; j < 5; j++) {
+          const a = j / 5 * Math.PI * 2 + k;
+          ctx.fillStyle = cols[(j + k) % cols.length];
+          ctx.beginPath(); ctx.arc(x + Math.cos(a) * 4, y + Math.sin(a) * 4, 2, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+  }
+
+  // Guest thoughts: short bubbles that hint at what the park needs.
+  let bubbles = [];
+  let bubbleT = 0;
+  function thoughtFor(sp) {
+    const g = lastSnap ? lastSnap.g : null;
+    const r = sp.ride !== undefined ? S.rides[sp.ride] : null;
+    const name = sp.ride !== undefined ? J.rideDef(sp.ride).name : 'ride';
+    const problems = [];
+    if (r && g && (r.wait || 0) > g.tolerance) problems.push('This line is forever!', `The ${name} needs more seats`, 'Ugh, still waiting…');
+    if (parkFull) problems.push('So crowded in here!');
+    if (S.priceRatio > 0.95) problems.push('Entry was so pricey…');
+    if (S.park.food === 0 && S.time > 120) problems.push("I'm hungry!", 'Where are the snacks?');
+    if (problems.length && rnd() < 0.75) return { text: pick(problems), bad: true };
+    const happy = [`Best ${name} ever!`, 'Wheee!', 'Again! Again!', 'I love this park!', `The ${name} rocks!`, 'What a view!'];
+    if (S.decor.fountain || S.decor.flowers) happy.push('Such a pretty park!');
+    if (r && r.mgr) happy.push('The staff here are great!');
+    return { text: pick(happy), bad: false };
+  }
+  function updateBubbles(dt) {
+    for (const b of bubbles) b.t += dt;
+    bubbles = bubbles.filter(b => b.t < 3.2 && !b.sp.gone);
+    bubbleT += dt;
+    if (bubbleT < 2.4 || bubbles.length >= 2) return;
+    bubbleT = 0;
+    const cands = sprites.filter(sp => sp.state === 'queue' && !bubbles.some(b => b.sp === sp));
+    if (!cands.length) return;
+    const sp = pick(cands);
+    const th = thoughtFor(sp);
+    bubbles.push({ sp, text: th.text, bad: th.bad, t: 0 });
+  }
+
   let animT = 0;
   function draw(dt) {
     if (!L) return;
@@ -254,6 +343,7 @@
       ctx.fillStyle = C.tree;
       ctx.beginPath(); ctx.arc(t.x - t.r * 0.25, t.y - t.r * 0.25, t.r * 0.62, 0, Math.PI * 2); ctx.fill();
     }
+    drawDecor();
     // String lights over the paths
     for (const y of L.hcorr) stringLights(y - 4, 4, W - 4, animT);
 
@@ -308,6 +398,7 @@
         ctx.fillText(label, p.cx - lw / 2 + 9, p.y + p.h - 13);
         ctx.fillStyle = C.gold;
         ctx.fillText(lvTxt, p.cx - lw / 2 + 17 + nameW, p.y + p.h - 13);
+        if (r.mgr) { ctx.font = '12px sans-serif'; ctx.fillStyle = C.gold; ctx.fillText('★'.repeat(r.mgr), p.x + 7, p.y + 14); }
         ctx.textBaseline = 'alphabetic';
         // Queue meter
         if (g) {
@@ -373,6 +464,24 @@
       ctx.fillStyle = '#f3d3b5';
       ctx.beginPath(); ctx.arc(sp.x, sp.y + bob - 3.4, 1.8, 0, Math.PI * 2); ctx.fill();
     }
+    // Guest thoughts
+    ctx.font = '700 11px Figtree, -apple-system, system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    for (const b of bubbles) {
+      const a = Math.min(1, b.t * 4, (3.2 - b.t) * 2);
+      if (a <= 0) continue;
+      const w = ctx.measureText(b.text).width + 14;
+      const x = Math.max(4, Math.min(W - w - 4, b.sp.x - w / 2)), y = b.sp.y - 30;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#fff7e6';
+      roundRect(x, y, w, 19, 9.5); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(b.sp.x - 4, y + 18); ctx.lineTo(b.sp.x, y + 25); ctx.lineTo(b.sp.x + 4, y + 18); ctx.fill();
+      ctx.fillStyle = b.bad ? '#b8243f' : '#1a2246';
+      ctx.textAlign = 'left';
+      ctx.fillText(b.text, x + 7, y + 10);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textBaseline = 'alphabetic';
     // Money popups
     ctx.font = '800 12px Figtree, -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -489,7 +598,7 @@
       </div>
       <div class="footrow">
         <div class="seg" id="bulk" aria-label="Levels per upgrade"><button aria-pressed="true" data-n="1">×1</button><button aria-pressed="false" data-n="10">×10</button><button aria-pressed="false" data-n="25">×25</button><button aria-pressed="false" data-n="max">Max</button></div>
-        <span class="count" data-k="count"></span>
+        <button class="mgr" data-act="mgr" data-k="mgr"></button>
       </div>`;
     v.querySelectorAll('[data-k]').forEach(n => { RV[n.dataset.k] = n; });
     RV.up = btn('primary', 'level');
@@ -519,6 +628,10 @@
         if (ok && J.milestonesPassed(S.rides[i].lvl) > before) toast(`${J.rideDef(i).name} reached Lv ${S.rides[i].lvl}: tickets ×2`);
       } else if (act === 'seat') ok = J.buySeats(S, i);
       else if (act === 'speed') ok = J.buySpeed(S, i);
+      else if (act === 'mgr') {
+        ok = J.buyManager(S, i);
+        if (ok) toast(`${J.MANAGERS[S.rides[i].mgr - 1].name} hired for the ${J.rideDef(i).name}: ${J.MANAGERS[S.rides[i].mgr - 1].desc}`);
+      }
       if (ok) refresh(true);
     });
   })();
@@ -536,7 +649,14 @@
       RV.icon.dataset.i = i; RV.icon.dataset.b = built;
     }
     text(RV.name, d.name);
-    text(RV.count, built ? `Ride ${i + 1} of ${builtCount()}` : 'Lot for sale');
+    RV.mgr.hidden = !built;
+    if (built) {
+      const mc = J.managerCost(S, i);
+      const t = J.MANAGERS[r.mgr];
+      html(RV.mgr, t ? `Hire ${t.name.toLowerCase()}<small>${t.desc} · ${J.money(mc)}</small>` : `${'★'.repeat(r.mgr)} Showrunner<small>Fully staffed</small>`);
+      RV.mgr.classList.toggle('can', !!t && S.cash >= mc);
+      RV.mgr.classList.toggle('max', !t);
+    }
     RV.builtBox.hidden = !built;
     RV.lotBox.hidden = built;
     RV.seat.hidden = !built; RV.speed.hidden = !built;
@@ -636,6 +756,61 @@
     return '';
   }
   const perkTiles = {};
+  const decorTiles = {};
+  function decorNow(id) {
+    const n = S.decor[id];
+    switch (id) {
+      case 'flowers': return `${n} placed · +${3 * n}% fun`;
+      case 'lamps': return `${n} placed · +${5 * n} s patience`;
+      case 'fountain': return `${n} placed · +${8 * n}% fun`;
+      case 'statue': return `${n} placed · +${10 * n}% guests`;
+    }
+    return '';
+  }
+  function renderDecor() {
+    for (const d of J.DECOR) {
+      const c = decorTiles[d.id] || (decorTiles[d.id] = tileEl($('decorTiles'), d.id, d.name, d.desc, 'decor'));
+      const cost = J.decorCost(S, d.id);
+      setTile(c, 0, decorNow(d.id), J.money(cost), S.cash >= cost, false);
+    }
+  }
+  $('decorTiles').addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]');
+    if (b && J.buyDecor(S, b.dataset.id)) refresh(true);
+  });
+
+  function goalRows() {
+    return S.goals.map(g => {
+      const info = J.goalInfo(S, g);
+      return { info, frac: Math.max(0, Math.min(1, info.value / info.target)) };
+    });
+  }
+  function renderGoals() {
+    const rows = goalRows();
+    if (!rows.length) return;
+    const top = rows.reduce((a, b) => (b.frac > a.frac ? b : a));
+    text($('gLabel'), top.info.label);
+    $('gBar').style.width = Math.round(top.frac * 100) + '%';
+    text($('gCount'), `${S.goalsDone} done`);
+    if (!$('goalModal').hidden) {
+      html($('goalList'), rows.map(r => `<div class="goalrow"><div class="gl"><span>${esc(r.info.label)}</span><span>${Math.floor(r.frac * 100)}%</span></div><div class="gprog"><i style="width:${Math.round(r.frac * 100)}%"></i></div></div>`).join(''));
+      const left = 5 - (S.goalsDone % 5);
+      text($('goalsDone'), `${S.goalsDone} goals finished. ${left === 5 ? 5 : left} more until the next ×2 income bonus.`);
+    }
+  }
+  $('goalbar').addEventListener('click', () => { openModal('goalModal'); refresh(true); });
+  $('goalClose').addEventListener('click', () => closeModal('goalModal'));
+  let goalT = 0;
+  function updateGoals(dt) {
+    goalT += dt;
+    if (goalT < 1) return;
+    goalT = 0;
+    for (const d of J.checkGoals(S, rnd)) {
+      toast(`Goal done: ${d.label}. +${J.money(d.prize)}` + (d.boost ? ' and ×2 income for 5 min!' : ''));
+      say(`<b>Goal done</b>: ${esc(d.label)} (+${J.money(d.prize)})`, true);
+    }
+  }
+
   function renderLegacy() {
     const have = J.tickets(S), pend = J.pendingTickets(S);
     text($('tixHave'), J.fmt(have, 0));
@@ -728,7 +903,7 @@
   }
 
   // ---------- HUD and tabs ----------
-  const EFFECT_LABEL = { sunny: 'Sunny ×1.5', celebrity: 'Celebrity ×2', heat: 'Heat wave: water rides', rush: 'Rush hour ×3', rain: 'Rain ×0.7' };
+  const EFFECT_LABEL = { sunny: 'Sunny ×1.5', celebrity: 'Celebrity ×2', heat: 'Heat wave: water rides', rush: 'Rush hour ×3', rain: 'Rain ×0.7', boost: 'Goal bonus: income ×2' };
   let parkFull = false;
   function renderHud(snap) {
     const inc = S.rate.rides + S.rate.gate + S.rate.food;
@@ -749,7 +924,7 @@
   function setTab(t) {
     tab = t;
     for (const b of document.querySelectorAll('.tab')) b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false');
-    for (const v of ['rides', 'park', 'legacy', 'stats']) $('view-' + v).hidden = v !== t;
+    for (const v of ['rides', 'park', 'decor', 'legacy', 'stats']) $('view-' + v).hidden = v !== t;
     if (t === 'rides') scrollToSel();
     refresh(true);
   }
@@ -765,6 +940,8 @@
     if (tab === 'rides') renderRides(snap);
     else if (tab === 'park') renderPark(snap);
     else if (tab === 'stats') renderStats(snap);
+    else if (tab === 'decor') renderDecor();
+    renderGoals();
     renderLegacy();
     if (L && L.slots !== S.rides.length) layout();
   }
@@ -831,6 +1008,8 @@
       updateSprites(dt);
       updateBalloon(dt);
       for (const p of popups) p.t += dt;
+      updateBubbles(dt);
+      updateGoals(dt);
       popups = popups.filter(p => p.t < 1.4);
     }
     refresh(false);

@@ -57,6 +57,22 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 8px var(--mint); flex: none; }
 .dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); } .dot.bad { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
 
+/* Goal bar */
+.goalbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); background: linear-gradient(90deg, rgba(255, 201, 74, .14), rgba(255, 201, 74, .03)); border-radius: 12px; padding: 5px 10px; text-align: left; }
+.gicon { color: var(--gold); font-size: 15px; text-shadow: 0 0 8px rgba(255, 201, 74, .6); }
+.gtext { display: grid; gap: 3px; min-width: 0; }
+.glabel { font-weight: 700; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gprog { height: 4px; border-radius: 3px; background: var(--night); overflow: hidden; }
+.gprog i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .4s; }
+.gcount { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+.goalrow { display: grid; gap: 4px; background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.goalrow .gl { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 13px; }
+.goalrow .gl span:last-child { color: var(--muted); font-weight: 600; white-space: nowrap; }
+.mgr { border: 1px solid var(--line); background: var(--night-3); border-radius: 10px; padding: 4px 10px; font-weight: 700; font-size: 12px; text-align: right; display: grid; line-height: 1.2; min-width: 0; }
+.mgr small { color: var(--muted); font-weight: 600; font-size: 11px; white-space: nowrap; }
+.mgr.can { border-color: var(--gold); color: var(--gold); }
+.mgr.max { opacity: .6; }
+
 /* Map */
 .map { position: relative; min-height: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #183d33; }
 .mapscroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
@@ -76,7 +92,7 @@ canvas#park { display: block; width: 100%; }
 .dock { min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 .sheet { height: clamp(236px, 38dvh, 300px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
 .view { display: flex; flex-direction: column; gap: 8px; flex: 1; }
-.tabbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px 0 max(8px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+.tabbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px 0 max(8px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
 .tab { border: 0; background: none; padding: 5px 2px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--muted); font-weight: 700; font-size: 11.5px; position: relative; }
 .tab svg { width: 22px; height: 22px; }
 .tab[aria-selected="true"] { color: var(--gold); }
@@ -160,7 +176,9 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
 /* Wide screens: map on the left, dock on the right. */
 @media (min-width: 900px) {
   .app { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr); padding-block: 12px 16px; column-gap: 16px; }
-  .hud { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 620px); align-items: center; justify-content: space-between; }
+  .hud { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 1fr) minmax(0, 560px); align-items: center; column-gap: 20px; }
+  .goalbar { grid-column: 2; grid-row: 1; max-width: 420px; justify-self: center; width: 100%; }
+  .kpis { grid-column: 3; grid-row: 1; }
   .brandrow { flex-direction: column; align-items: flex-start; }
   .dock { flex-direction: column-reverse; justify-content: flex-end; }
   .sheet { height: auto; flex: 1; }
@@ -186,6 +204,11 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       <div class="kpi"><span class="lab">Guests</span><span class="val" id="kVis">0</span></div>
       <div class="kpi"><span class="lab">Mood</span><span class="val mood"><i class="dot" id="kMoodDot"></i><span id="kMood">Happy</span></span></div>
     </div>
+    <button class="goalbar" id="goalbar" aria-label="Show goals">
+      <span class="gicon" aria-hidden="true">★</span>
+      <span class="gtext"><span class="glabel" id="gLabel">Goals</span><span class="gprog"><i id="gBar"></i></span></span>
+      <span class="gcount" id="gCount"></span>
+    </button>
     <div class="bulbs" aria-hidden="true"></div>
   </header>
 
@@ -205,6 +228,11 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
           <input type="range" id="priceSlider" min="0" max="150" step="1" value="50" aria-label="Entry ticket price">
         </div>
         <div class="tiles" id="parkTiles"></div>
+      </div>
+
+      <div class="view" id="view-decor" hidden>
+        <div class="small" style="padding-inline:2px">Decorations appear on your map and make every ride more fun.</div>
+        <div class="tiles" id="decorTiles"></div>
       </div>
 
       <div class="view" id="view-legacy" hidden>
@@ -229,6 +257,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     <nav class="tabbar" role="tablist">
       <button class="tab" role="tab" data-tab="rides" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="10" r="7"/><path d="M12 3v14M5 10h14M7 5l10 10M17 5 7 15M8 21l4-4 4 4"/></svg>Rides</button>
       <button class="tab" role="tab" data-tab="park" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"/></svg>Park</button>
+      <button class="tab" role="tab" data-tab="decor" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-8"/><circle cx="12" cy="8" r="3"/><path d="M12 5V3M15 8h2M7 8h2M14.5 5.5 16 4M8 4l1.5 1.5"/><path d="M8 21c0-3 2-4 4-4s4 1 4 4"/></svg>Decor</button>
       <button class="tab" role="tab" data-tab="legacy" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 8h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 8v10" stroke-dasharray="2 2"/></svg>Legacy<span class="badge" id="legacyBadge" hidden></span></button>
       <button class="tab" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Stats</button>
     </nav>
@@ -249,6 +278,15 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     <textarea id="importText" aria-label="Paste a save code" placeholder="Paste a save code here"></textarea>
     <div class="rowbtns"><button class="plain go" id="importBtn">Load code</button><button class="plain" id="saveClose">Close</button></div>
     <div class="small" id="importMsg"></div>
+  </div>
+</div>
+<div class="modal" id="goalModal" hidden>
+  <div class="panel">
+    <h2>Goals</h2>
+    <div class="small">Finish a goal to win cash. Every 5th goal also doubles your income for 5 minutes.</div>
+    <div id="goalList" style="display:grid;gap:8px"></div>
+    <div class="small" id="goalsDone"></div>
+    <div class="rowbtns"><button class="plain go" id="goalClose">Close</button></div>
   </div>
 </div>
 <div class="modal" id="resetModal" hidden>

@@ -71,6 +71,22 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 8px var(--mint); flex: none; }
 .dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); } .dot.bad { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
 
+/* Goal bar */
+.goalbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); background: linear-gradient(90deg, rgba(255, 201, 74, .14), rgba(255, 201, 74, .03)); border-radius: 12px; padding: 5px 10px; text-align: left; }
+.gicon { color: var(--gold); font-size: 15px; text-shadow: 0 0 8px rgba(255, 201, 74, .6); }
+.gtext { display: grid; gap: 3px; min-width: 0; }
+.glabel { font-weight: 700; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gprog { height: 4px; border-radius: 3px; background: var(--night); overflow: hidden; }
+.gprog i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .4s; }
+.gcount { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+.goalrow { display: grid; gap: 4px; background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.goalrow .gl { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 13px; }
+.goalrow .gl span:last-child { color: var(--muted); font-weight: 600; white-space: nowrap; }
+.mgr { border: 1px solid var(--line); background: var(--night-3); border-radius: 10px; padding: 4px 10px; font-weight: 700; font-size: 12px; text-align: right; display: grid; line-height: 1.2; min-width: 0; }
+.mgr small { color: var(--muted); font-weight: 600; font-size: 11px; white-space: nowrap; }
+.mgr.can { border-color: var(--gold); color: var(--gold); }
+.mgr.max { opacity: .6; }
+
 /* Map */
 .map { position: relative; min-height: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #183d33; }
 .mapscroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
@@ -90,7 +106,7 @@ canvas#park { display: block; width: 100%; }
 .dock { min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 .sheet { height: clamp(236px, 38dvh, 300px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
 .view { display: flex; flex-direction: column; gap: 8px; flex: 1; }
-.tabbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px 0 max(8px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+.tabbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px 0 max(8px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
 .tab { border: 0; background: none; padding: 5px 2px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--muted); font-weight: 700; font-size: 11.5px; position: relative; }
 .tab svg { width: 22px; height: 22px; }
 .tab[aria-selected="true"] { color: var(--gold); }
@@ -174,7 +190,9 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
 /* Wide screens: map on the left, dock on the right. */
 @media (min-width: 900px) {
   .app { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr); padding-block: 12px 16px; column-gap: 16px; }
-  .hud { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 620px); align-items: center; justify-content: space-between; }
+  .hud { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 1fr) minmax(0, 560px); align-items: center; column-gap: 20px; }
+  .goalbar { grid-column: 2; grid-row: 1; max-width: 420px; justify-self: center; width: 100%; }
+  .kpis { grid-column: 3; grid-row: 1; }
   .brandrow { flex-direction: column; align-items: flex-start; }
   .dock { flex-direction: column-reverse; justify-content: flex-end; }
   .sheet { height: auto; flex: 1; }
@@ -202,6 +220,11 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       <div class="kpi"><span class="lab">Guests</span><span class="val" id="kVis">0</span></div>
       <div class="kpi"><span class="lab">Mood</span><span class="val mood"><i class="dot" id="kMoodDot"></i><span id="kMood">Happy</span></span></div>
     </div>
+    <button class="goalbar" id="goalbar" aria-label="Show goals">
+      <span class="gicon" aria-hidden="true">★</span>
+      <span class="gtext"><span class="glabel" id="gLabel">Goals</span><span class="gprog"><i id="gBar"></i></span></span>
+      <span class="gcount" id="gCount"></span>
+    </button>
     <div class="bulbs" aria-hidden="true"></div>
   </header>
 
@@ -221,6 +244,11 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
           <input type="range" id="priceSlider" min="0" max="150" step="1" value="50" aria-label="Entry ticket price">
         </div>
         <div class="tiles" id="parkTiles"></div>
+      </div>
+
+      <div class="view" id="view-decor" hidden>
+        <div class="small" style="padding-inline:2px">Decorations appear on your map and make every ride more fun.</div>
+        <div class="tiles" id="decorTiles"></div>
       </div>
 
       <div class="view" id="view-legacy" hidden>
@@ -245,6 +273,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     <nav class="tabbar" role="tablist">
       <button class="tab" role="tab" data-tab="rides" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="10" r="7"/><path d="M12 3v14M5 10h14M7 5l10 10M17 5 7 15M8 21l4-4 4 4"/></svg>Rides</button>
       <button class="tab" role="tab" data-tab="park" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"/></svg>Park</button>
+      <button class="tab" role="tab" data-tab="decor" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-8"/><circle cx="12" cy="8" r="3"/><path d="M12 5V3M15 8h2M7 8h2M14.5 5.5 16 4M8 4l1.5 1.5"/><path d="M8 21c0-3 2-4 4-4s4 1 4 4"/></svg>Decor</button>
       <button class="tab" role="tab" data-tab="legacy" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 8h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 8v10" stroke-dasharray="2 2"/></svg>Legacy<span class="badge" id="legacyBadge" hidden></span></button>
       <button class="tab" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Stats</button>
     </nav>
@@ -265,6 +294,15 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     <textarea id="importText" aria-label="Paste a save code" placeholder="Paste a save code here"></textarea>
     <div class="rowbtns"><button class="plain go" id="importBtn">Load code</button><button class="plain" id="saveClose">Close</button></div>
     <div class="small" id="importMsg"></div>
+  </div>
+</div>
+<div class="modal" id="goalModal" hidden>
+  <div class="panel">
+    <h2>Goals</h2>
+    <div class="small">Finish a goal to win cash. Every 5th goal also doubles your income for 5 minutes.</div>
+    <div id="goalList" style="display:grid;gap:8px"></div>
+    <div class="small" id="goalsDone"></div>
+    <div class="rowbtns"><button class="plain go" id="goalClose">Close</button></div>
   </div>
 </div>
 <div class="modal" id="resetModal" hidden>
@@ -377,7 +415,23 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   ];
   const PERK = Object.fromEntries(PERKS.map(p => [p.id, p]));
 
-  function newRide() { return { lvl: 0, cap: 0, spd: 0, queue: 0 }; }
+  // ---------- Ride managers ----------
+  const MANAGERS = [
+    { name: 'Operator', desc: 'Tickets ×2', cost: 300 },
+    { name: 'Supervisor', desc: '+50% riders', cost: 3e4 },
+    { name: 'Showrunner', desc: 'Tickets ×2 and fun ×1.5', cost: 3e6 },
+  ];
+
+  // ---------- Decorations ----------
+  const DECOR = [
+    { id: 'flowers', name: 'Flower beds', desc: '+3% fun on every ride', base: 150, growth: 1.6 },
+    { id: 'lamps', name: 'Lamp posts', desc: 'Guests queue 5 s longer happily', base: 800, growth: 1.9 },
+    { id: 'fountain', name: 'Fountains', desc: '+8% fun on every ride', base: 6000, growth: 2.3 },
+    { id: 'statue', name: 'Mascot statues', desc: '+10% guest arrivals', base: 1.2e5, growth: 3 },
+  ];
+  const DEC = Object.fromEntries(DECOR.map(d => [d.id, d]));
+
+  function newRide() { return { lvl: 0, cap: 0, spd: 0, queue: 0, mgr: 0 }; }
 
   function newState(keep) {
     const s = {
@@ -394,6 +448,9 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       ticketsEarned: 0,     // tickets ever earned from selling parks
       ticketsSpent: 0,
       perks: { seed: 0, fame: 0, thrift: 0, patience: 0 },
+      decor: { flowers: 0, lamps: 0, fountain: 0, statue: 0 },
+      goals: [],
+      goalsDone: 0,
       parkNumber: 1,
       totalVisitors: 0,
       runVisitors: 0,
@@ -406,7 +463,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       created: Date.now(),
     };
     if (keep) {
-      for (const k of ['lifetimeEarned', 'ticketsEarned', 'ticketsSpent', 'totalVisitors', 'bestIncome', 'created']) s[k] = keep[k];
+      for (const k of ['lifetimeEarned', 'ticketsEarned', 'ticketsSpent', 'totalVisitors', 'bestIncome', 'created', 'goalsDone']) s[k] = keep[k];
       s.perks = Object.assign({}, s.perks, keep.perks);
       s.parkNumber = (keep.parkNumber || 1) + 1;
       s.cash = 15 + seedCash(s.perks.seed);
@@ -424,6 +481,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     s.park = Object.assign(newState().park, raw.park || {});
     s.perks = Object.assign(newState().perks, raw.perks || {});
     s.rate = Object.assign(newState().rate, raw.rate || {});
+    s.decor = Object.assign(newState().decor, raw.decor || {});
+    if (!Array.isArray(s.goals)) s.goals = [];
     if (!Array.isArray(s.rides) || !s.rides.length) s.rides = [newRide()];
     s.rides = s.rides.map(r => Object.assign(newRide(), r));
     if (!Array.isArray(s.effects)) s.effects = [];
@@ -438,10 +497,11 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   function globals(s) {
     const t = s.ticketsEarned; // every ticket ever earned counts, spent or not
     return {
-      incomeMult: 1 + 0.03 * t,
-      arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t),
+      incomeMult: (1 + 0.03 * t) * (hasEffect(s, 'boost') ? 2 : 1),
+      arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t) * (1 + 0.1 * s.decor.statue),
+      decorFun: 1 + 0.03 * s.decor.flowers + 0.08 * s.decor.fountain,
       crewMult: 1 + 0.1 * s.park.crew,
-      tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience,
+      tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience + 5 * s.decor.lamps,
       capacity: Math.floor(60 * Math.pow(1.6, s.park.land)),
       foodRate: 0.04 * (1 - Math.pow(0.93, s.park.food)),
       costMult: Math.pow(0.95, s.perks.thrift),
@@ -455,9 +515,9 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     const m = milestonesPassed(r.lvl);
     const heat = d.water && hasEffect(s, 'heat');
     return {
-      fun: d.fun0 * r.lvl * Math.pow(1.5, m) * (heat ? 3 : 1),
-      price: d.price0 * (1 + 0.15 * (r.lvl - 1)) * Math.pow(2, m) * g.incomeMult,
-      throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.02 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * g.crewMult,
+      fun: d.fun0 * r.lvl * Math.pow(1.5, m) * (heat ? 3 : 1) * g.decorFun * (r.mgr >= 3 ? 1.5 : 1),
+      price: d.price0 * (1 + 0.15 * (r.lvl - 1)) * Math.pow(2, m) * g.incomeMult * (r.mgr >= 1 ? 2 : 1) * (r.mgr >= 3 ? 2 : 1),
+      throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.02 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * g.crewMult * (r.mgr >= 2 ? 1.5 : 1),
     };
   }
 
@@ -506,6 +566,11 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     const r = s.rides[i];
     return r.spd >= MAX_SPEED ? Infinity : rideDef(i).cost0 * 10 * Math.pow(SPEED_GROWTH, r.spd) * globals(s).costMult;
   }
+  function managerCost(s, i) {
+    const r = s.rides[i];
+    return r.mgr >= MANAGERS.length ? Infinity : rideDef(i).cost0 * MANAGERS[r.mgr].cost * globals(s).costMult;
+  }
+  function decorCost(s, id) { return DEC[id].base * Math.pow(DEC[id].growth, s.decor[id]); }
   function parkCost(s, id) {
     const u = UPG[id], l = s.park[id];
     return u.max !== undefined && l >= u.max ? Infinity : u.base * Math.pow(u.growth, l);
@@ -528,12 +593,77 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   }
   function buySeats(s, i) { if (!s.rides[i].lvl || !spend(s, seatCost(s, i))) return false; s.rides[i].cap++; return true; }
   function buySpeed(s, i) { if (!s.rides[i].lvl || !spend(s, speedCost(s, i))) return false; s.rides[i].spd++; return true; }
+  function buyManager(s, i) { if (!s.rides[i].lvl || !spend(s, managerCost(s, i))) return false; s.rides[i].mgr++; return true; }
+  function buyDecor(s, id) { if (!spend(s, decorCost(s, id))) return false; s.decor[id]++; return true; }
   function buyPark(s, id) { if (!spend(s, parkCost(s, id))) return false; s.park[id]++; return true; }
   function buyPerk(s, id) {
     const c = perkCost(s, id);
     if (!(c <= tickets(s))) return false;
     s.ticketsSpent += c; s.perks[id]++;
     return true;
+  }
+
+  // ---------- Goals ----------
+  // Three short goals are always on offer; each is built from where the park is right now.
+  function nice(x) {
+    const p = Math.pow(10, Math.floor(Math.log10(Math.max(1, x))));
+    for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= x) return m * p;
+    return 10 * p;
+  }
+  function builtIdx(s) { const a = []; s.rides.forEach((r, i) => { if (r.lvl) a.push(i); }); return a; }
+  function makeGoal(s, rnd) {
+    const built = builtIdx(s);
+    const have = new Set(s.goals.map(g => g.type + ':' + (g.i ?? g.id ?? '')));
+    const opts = [];
+    const add = (w, g) => { if (!have.has(g.type + ':' + (g.i ?? g.id ?? ''))) opts.push([w, g]); };
+    const next = s.rides.length - 1;
+    if (!s.rides[next].lvl) add(3, { type: 'build', i: next });
+    for (const i of built) add(1.2, { type: 'level', i, target: nextMilestone(s.rides[i].lvl) });
+    if (built.length) add(2, { type: 'guests', target: nice(Math.max(15, s.inPark * 1.5)) });
+    add(2, { type: 'earn', target: nice(Math.max(200, s.runEarned * 2.5)) });
+    if (built.length) add(1, { type: 'land', target: s.park.land + 1 });
+    const d = DECOR[Math.floor(rnd() * DECOR.length)];
+    if (s.runEarned > d.base * 3) add(1, { type: 'decor', id: d.id, target: s.decor[d.id] + 1 });
+    const mi = built.find(i => s.rides[i].mgr < MANAGERS.length && s.runEarned > managerCost(s, i) * 0.3);
+    if (mi !== undefined) add(1.5, { type: 'manager', i: mi, target: s.rides[mi].mgr + 1 });
+    if (!opts.length) return { type: 'earn', target: nice(Math.max(200, s.runEarned * 4)) };
+    let x = rnd() * opts.reduce((a, o) => a + o[0], 0);
+    for (const [w, g] of opts) if ((x -= w) <= 0) return g;
+    return opts[0][1];
+  }
+  function goalInfo(s, g) {
+    const r = g.i !== undefined ? s.rides[g.i] : null;
+    const name = g.i !== undefined ? rideDef(g.i).name : '';
+    switch (g.type) {
+      case 'build': return { label: 'Build the ' + name, value: r && r.lvl ? 1 : 0, target: 1 };
+      case 'level': return { label: `${name} to Lv ${g.target}`, value: r ? r.lvl : 0, target: g.target };
+      case 'guests': return { label: `Have ${fmt(g.target)} guests in the park`, value: s.inPark, target: g.target };
+      case 'earn': return { label: `Earn ${money(g.target)} in this park`, value: s.runEarned, target: g.target };
+      case 'land': return { label: 'Buy more land', value: s.park.land, target: g.target };
+      case 'decor': return { label: 'Add ' + DEC[g.id].name.toLowerCase().replace(/s$/, ''), value: s.decor[g.id], target: g.target };
+      case 'manager': return { label: `Hire a ${MANAGERS[g.target - 1].name.toLowerCase()} for the ${name}`, value: r ? r.mgr : 0, target: g.target };
+    }
+    return { label: '', value: 1, target: 1 };
+  }
+  // Fills the goal list and pays out finished goals. Every 5th goal also starts a 5-minute ×2 income boost.
+  function checkGoals(s, rnd) {
+    const done = [];
+    s.goals = s.goals.filter(g => g.i === undefined || g.i < s.rides.length);
+    for (let k = 0; k < s.goals.length; k++) {
+      const info = goalInfo(s, s.goals[k]);
+      if (info.value >= info.target) {
+        const inc = s.rate.rides + s.rate.gate + s.rate.food;
+        const prize = Math.max(50, inc * 120, s.runEarned * 0.02);
+        s.cash += prize; s.runEarned += prize; s.lifetimeEarned += prize;
+        s.goalsDone++;
+        const boost = s.goalsDone % 5 === 0;
+        if (boost) s.effects.push({ type: 'boost', until: s.time + 300 });
+        done.push({ label: info.label, prize, boost });
+        s.goals.splice(k, 1); k--;
+      }
+    }
+    while (s.goals.length < 3) s.goals.push(makeGoal(s, rnd));
+    return done;
   }
 
   function ticketsTotalFor(lifetime) { return Math.floor(Math.sqrt(Math.max(0, lifetime) / TICKET_SCALE)); }
@@ -731,7 +861,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   }
 
   root.Joyland = {
-    STAY, RIDE_EVERY, MAX_SPEED, PARK_UPGRADES, PERKS, EVENTS,
+    STAY, RIDE_EVERY, MAX_SPEED, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, DECOR,
+    managerCost, decorCost, buyManager, buyDecor, checkGoals, goalInfo,
     rideDef, milestonesPassed, nextMilestone, newState, migrate, globals, rideStats, snapshot, priceLabel,
     levelCost, maxLevels, seatCost, speedCost, parkCost, perkCost, seedCash,
     buyLevels, buySeats, buySpeed, buyPark, buyPerk, tickets, pendingTickets, ticketsTotalFor, sellPark,
@@ -869,7 +1000,18 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       if (Math.abs(x - W / 2) < 70) continue;
       trees.push({ x, y, r: 9 + r01() * 9 });
     }
-    L = { W, H, cols, pad, gap, top, plotW, plotH, rows, plots, vcorr, hcorr, gate, dpr, slots, bottomY, trees, viewH };
+    // Spots for decorations: empty lots in the grid first, then the lawn by the entrance.
+    const spots = [];
+    for (let k = slots; k < rows * cols; k++) {
+      const r = Math.floor(k / cols), c = k % cols;
+      const x = pad + c * (plotW + gap), y = top + r * (plotH + gap);
+      for (const [fx, fy] of [[0.3, 0.3], [0.7, 0.7], [0.7, 0.3], [0.3, 0.7]]) spots.push([x + plotW * fx, y + plotH * fy]);
+    }
+    for (let y = bottomY + 24; y < H - 24; y += 34)
+      for (let x = 24; x < W - 20; x += 40) if (Math.abs(x - W / 2) > 78) spots.push([x + ((y / 34) % 2) * 12, y]);
+    const lampSpots = [];
+    for (const y of hcorr) for (const x of vcorr) lampSpots.push([x, y]);
+    L = { W, H, cols, pad, gap, top, plotW, plotH, rows, plots, vcorr, hcorr, gate, dpr, slots, bottomY, trees, viewH, spots, lampSpots };
     for (const sp of sprites) { sp.x = Math.min(sp.x, W); sp.y = Math.min(sp.y, H); }
   }
 
@@ -892,6 +1034,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     }
     const p = L.plots[i];
     sp.state = 'walk';
+    sp.ride = i;
     sp.speed = 38 + rnd() * 26;
     routeTo(sp, p.x + 8 + rnd() * (p.w - 16), p.qy + (rnd() - 0.5) * 7);
   }
@@ -973,6 +1116,83 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     ctx.globalAlpha = 1;
   }
 
+  function drawDecor() {
+    const d = S.decor;
+    // Lamp posts at path crossings
+    const nl = Math.min(d.lamps, L.lampSpots.length);
+    for (let k = 0; k < nl; k++) {
+      const [x, y] = L.lampSpots[(k * 7) % L.lampSpots.length];
+      const glow = ctx.createRadialGradient(x, y - 8, 1, x, y - 8, 18);
+      glow.addColorStop(0, 'rgba(255,214,120,.55)'); glow.addColorStop(1, 'rgba(255,214,120,0)');
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y - 8, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2b3157'; ctx.fillRect(x - 1, y - 8, 2, 10);
+      ctx.fillStyle = '#ffe3a0'; ctx.beginPath(); ctx.arc(x, y - 9, 2.6, 0, Math.PI * 2); ctx.fill();
+    }
+    const items = [];
+    for (let k = 0; k < Math.min(d.fountain, 6); k++) items.push('fountain');
+    for (let k = 0; k < Math.min(d.statue, 6); k++) items.push('statue');
+    for (let k = 0; k < Math.min(d.flowers, 40); k++) items.push('flowers');
+    const n = Math.min(items.length, L.spots.length);
+    for (let k = 0; k < n; k++) {
+      const [x, y] = L.spots[k];
+      const kind = items[k];
+      if (kind === 'fountain') {
+        ctx.fillStyle = '#7d84ad'; ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3d9be0'; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+        for (let j = 0; j < 6; j++) {
+          const a = j / 6 * Math.PI * 2 + animT * 1.5, r = 3 + ((animT * 6 + j) % 5);
+          ctx.fillStyle = 'rgba(220,240,255,.85)'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * r, y + Math.sin(a) * r, 1.3, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = '#e8f6ff'; ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+      } else if (kind === 'statue') {
+        ctx.fillStyle = '#6b6f94'; ctx.fillRect(x - 7, y - 2, 14, 9);
+        ctx.save(); ctx.shadowColor = C.gold; ctx.shadowBlur = 10;
+        ctx.fillStyle = C.gold; ctx.beginPath(); ctx.arc(x, y - 9, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x - 4, y - 15, 2.4, 0, Math.PI * 2); ctx.arc(x + 4, y - 15, 2.4, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#2f6b4f'; ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
+        const cols = ['#ff7ccf', '#ffd54a', '#ff5d73', '#a98bff', '#ffffff'];
+        for (let j = 0; j < 5; j++) {
+          const a = j / 5 * Math.PI * 2 + k;
+          ctx.fillStyle = cols[(j + k) % cols.length];
+          ctx.beginPath(); ctx.arc(x + Math.cos(a) * 4, y + Math.sin(a) * 4, 2, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+  }
+
+  // Guest thoughts: short bubbles that hint at what the park needs.
+  let bubbles = [];
+  let bubbleT = 0;
+  function thoughtFor(sp) {
+    const g = lastSnap ? lastSnap.g : null;
+    const r = sp.ride !== undefined ? S.rides[sp.ride] : null;
+    const name = sp.ride !== undefined ? J.rideDef(sp.ride).name : 'ride';
+    const problems = [];
+    if (r && g && (r.wait || 0) > g.tolerance) problems.push('This line is forever!', `The ${name} needs more seats`, 'Ugh, still waiting…');
+    if (parkFull) problems.push('So crowded in here!');
+    if (S.priceRatio > 0.95) problems.push('Entry was so pricey…');
+    if (S.park.food === 0 && S.time > 120) problems.push("I'm hungry!", 'Where are the snacks?');
+    if (problems.length && rnd() < 0.75) return { text: pick(problems), bad: true };
+    const happy = [`Best ${name} ever!`, 'Wheee!', 'Again! Again!', 'I love this park!', `The ${name} rocks!`, 'What a view!'];
+    if (S.decor.fountain || S.decor.flowers) happy.push('Such a pretty park!');
+    if (r && r.mgr) happy.push('The staff here are great!');
+    return { text: pick(happy), bad: false };
+  }
+  function updateBubbles(dt) {
+    for (const b of bubbles) b.t += dt;
+    bubbles = bubbles.filter(b => b.t < 3.2 && !b.sp.gone);
+    bubbleT += dt;
+    if (bubbleT < 2.4 || bubbles.length >= 2) return;
+    bubbleT = 0;
+    const cands = sprites.filter(sp => sp.state === 'queue' && !bubbles.some(b => b.sp === sp));
+    if (!cands.length) return;
+    const sp = pick(cands);
+    const th = thoughtFor(sp);
+    bubbles.push({ sp, text: th.text, bad: th.bad, t: 0 });
+  }
+
   let animT = 0;
   function draw(dt) {
     if (!L) return;
@@ -995,6 +1215,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       ctx.fillStyle = C.tree;
       ctx.beginPath(); ctx.arc(t.x - t.r * 0.25, t.y - t.r * 0.25, t.r * 0.62, 0, Math.PI * 2); ctx.fill();
     }
+    drawDecor();
     // String lights over the paths
     for (const y of L.hcorr) stringLights(y - 4, 4, W - 4, animT);
 
@@ -1049,6 +1270,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
         ctx.fillText(label, p.cx - lw / 2 + 9, p.y + p.h - 13);
         ctx.fillStyle = C.gold;
         ctx.fillText(lvTxt, p.cx - lw / 2 + 17 + nameW, p.y + p.h - 13);
+        if (r.mgr) { ctx.font = '12px sans-serif'; ctx.fillStyle = C.gold; ctx.fillText('★'.repeat(r.mgr), p.x + 7, p.y + 14); }
         ctx.textBaseline = 'alphabetic';
         // Queue meter
         if (g) {
@@ -1114,6 +1336,24 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       ctx.fillStyle = '#f3d3b5';
       ctx.beginPath(); ctx.arc(sp.x, sp.y + bob - 3.4, 1.8, 0, Math.PI * 2); ctx.fill();
     }
+    // Guest thoughts
+    ctx.font = '700 11px Figtree, -apple-system, system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    for (const b of bubbles) {
+      const a = Math.min(1, b.t * 4, (3.2 - b.t) * 2);
+      if (a <= 0) continue;
+      const w = ctx.measureText(b.text).width + 14;
+      const x = Math.max(4, Math.min(W - w - 4, b.sp.x - w / 2)), y = b.sp.y - 30;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#fff7e6';
+      roundRect(x, y, w, 19, 9.5); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(b.sp.x - 4, y + 18); ctx.lineTo(b.sp.x, y + 25); ctx.lineTo(b.sp.x + 4, y + 18); ctx.fill();
+      ctx.fillStyle = b.bad ? '#b8243f' : '#1a2246';
+      ctx.textAlign = 'left';
+      ctx.fillText(b.text, x + 7, y + 10);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textBaseline = 'alphabetic';
     // Money popups
     ctx.font = '800 12px Figtree, -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -1230,7 +1470,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       </div>
       <div class="footrow">
         <div class="seg" id="bulk" aria-label="Levels per upgrade"><button aria-pressed="true" data-n="1">×1</button><button aria-pressed="false" data-n="10">×10</button><button aria-pressed="false" data-n="25">×25</button><button aria-pressed="false" data-n="max">Max</button></div>
-        <span class="count" data-k="count"></span>
+        <button class="mgr" data-act="mgr" data-k="mgr"></button>
       </div>`;
     v.querySelectorAll('[data-k]').forEach(n => { RV[n.dataset.k] = n; });
     RV.up = btn('primary', 'level');
@@ -1260,6 +1500,10 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
         if (ok && J.milestonesPassed(S.rides[i].lvl) > before) toast(`${J.rideDef(i).name} reached Lv ${S.rides[i].lvl}: tickets ×2`);
       } else if (act === 'seat') ok = J.buySeats(S, i);
       else if (act === 'speed') ok = J.buySpeed(S, i);
+      else if (act === 'mgr') {
+        ok = J.buyManager(S, i);
+        if (ok) toast(`${J.MANAGERS[S.rides[i].mgr - 1].name} hired for the ${J.rideDef(i).name}: ${J.MANAGERS[S.rides[i].mgr - 1].desc}`);
+      }
       if (ok) refresh(true);
     });
   })();
@@ -1277,7 +1521,14 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       RV.icon.dataset.i = i; RV.icon.dataset.b = built;
     }
     text(RV.name, d.name);
-    text(RV.count, built ? `Ride ${i + 1} of ${builtCount()}` : 'Lot for sale');
+    RV.mgr.hidden = !built;
+    if (built) {
+      const mc = J.managerCost(S, i);
+      const t = J.MANAGERS[r.mgr];
+      html(RV.mgr, t ? `Hire ${t.name.toLowerCase()}<small>${t.desc} · ${J.money(mc)}</small>` : `${'★'.repeat(r.mgr)} Showrunner<small>Fully staffed</small>`);
+      RV.mgr.classList.toggle('can', !!t && S.cash >= mc);
+      RV.mgr.classList.toggle('max', !t);
+    }
     RV.builtBox.hidden = !built;
     RV.lotBox.hidden = built;
     RV.seat.hidden = !built; RV.speed.hidden = !built;
@@ -1377,6 +1628,61 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     return '';
   }
   const perkTiles = {};
+  const decorTiles = {};
+  function decorNow(id) {
+    const n = S.decor[id];
+    switch (id) {
+      case 'flowers': return `${n} placed · +${3 * n}% fun`;
+      case 'lamps': return `${n} placed · +${5 * n} s patience`;
+      case 'fountain': return `${n} placed · +${8 * n}% fun`;
+      case 'statue': return `${n} placed · +${10 * n}% guests`;
+    }
+    return '';
+  }
+  function renderDecor() {
+    for (const d of J.DECOR) {
+      const c = decorTiles[d.id] || (decorTiles[d.id] = tileEl($('decorTiles'), d.id, d.name, d.desc, 'decor'));
+      const cost = J.decorCost(S, d.id);
+      setTile(c, 0, decorNow(d.id), J.money(cost), S.cash >= cost, false);
+    }
+  }
+  $('decorTiles').addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]');
+    if (b && J.buyDecor(S, b.dataset.id)) refresh(true);
+  });
+
+  function goalRows() {
+    return S.goals.map(g => {
+      const info = J.goalInfo(S, g);
+      return { info, frac: Math.max(0, Math.min(1, info.value / info.target)) };
+    });
+  }
+  function renderGoals() {
+    const rows = goalRows();
+    if (!rows.length) return;
+    const top = rows.reduce((a, b) => (b.frac > a.frac ? b : a));
+    text($('gLabel'), top.info.label);
+    $('gBar').style.width = Math.round(top.frac * 100) + '%';
+    text($('gCount'), `${S.goalsDone} done`);
+    if (!$('goalModal').hidden) {
+      html($('goalList'), rows.map(r => `<div class="goalrow"><div class="gl"><span>${esc(r.info.label)}</span><span>${Math.floor(r.frac * 100)}%</span></div><div class="gprog"><i style="width:${Math.round(r.frac * 100)}%"></i></div></div>`).join(''));
+      const left = 5 - (S.goalsDone % 5);
+      text($('goalsDone'), `${S.goalsDone} goals finished. ${left === 5 ? 5 : left} more until the next ×2 income bonus.`);
+    }
+  }
+  $('goalbar').addEventListener('click', () => { openModal('goalModal'); refresh(true); });
+  $('goalClose').addEventListener('click', () => closeModal('goalModal'));
+  let goalT = 0;
+  function updateGoals(dt) {
+    goalT += dt;
+    if (goalT < 1) return;
+    goalT = 0;
+    for (const d of J.checkGoals(S, rnd)) {
+      toast(`Goal done: ${d.label}. +${J.money(d.prize)}` + (d.boost ? ' and ×2 income for 5 min!' : ''));
+      say(`<b>Goal done</b>: ${esc(d.label)} (+${J.money(d.prize)})`, true);
+    }
+  }
+
   function renderLegacy() {
     const have = J.tickets(S), pend = J.pendingTickets(S);
     text($('tixHave'), J.fmt(have, 0));
@@ -1469,7 +1775,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   }
 
   // ---------- HUD and tabs ----------
-  const EFFECT_LABEL = { sunny: 'Sunny ×1.5', celebrity: 'Celebrity ×2', heat: 'Heat wave: water rides', rush: 'Rush hour ×3', rain: 'Rain ×0.7' };
+  const EFFECT_LABEL = { sunny: 'Sunny ×1.5', celebrity: 'Celebrity ×2', heat: 'Heat wave: water rides', rush: 'Rush hour ×3', rain: 'Rain ×0.7', boost: 'Goal bonus: income ×2' };
   let parkFull = false;
   function renderHud(snap) {
     const inc = S.rate.rides + S.rate.gate + S.rate.food;
@@ -1490,7 +1796,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   function setTab(t) {
     tab = t;
     for (const b of document.querySelectorAll('.tab')) b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false');
-    for (const v of ['rides', 'park', 'legacy', 'stats']) $('view-' + v).hidden = v !== t;
+    for (const v of ['rides', 'park', 'decor', 'legacy', 'stats']) $('view-' + v).hidden = v !== t;
     if (t === 'rides') scrollToSel();
     refresh(true);
   }
@@ -1506,6 +1812,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     if (tab === 'rides') renderRides(snap);
     else if (tab === 'park') renderPark(snap);
     else if (tab === 'stats') renderStats(snap);
+    else if (tab === 'decor') renderDecor();
+    renderGoals();
     renderLegacy();
     if (L && L.slots !== S.rides.length) layout();
   }
@@ -1572,6 +1880,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       updateSprites(dt);
       updateBalloon(dt);
       for (const p of popups) p.t += dt;
+      updateBubbles(dt);
+      updateGoals(dt);
       popups = popups.filter(p => p.t < 1.4);
     }
     refresh(false);
