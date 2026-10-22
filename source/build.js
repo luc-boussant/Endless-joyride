@@ -5,12 +5,13 @@ const fs = require('fs');
 const crypto = require('crypto');
 const dir = __dirname;
 const read = f => fs.readFileSync(dir + '/src/' + f, 'utf8');
-const body = read('index.html')
+let body = read('index.html')
   .replace('/*CORE*/', () => read('core.js'))
   .replace('/*UI*/', () => read('ui.js'));
-fs.writeFileSync(dir + '/endless-joyland.html', body);
 
 const version = crypto.createHash('sha1').update(body).digest('hex').slice(0, 10);
+body = body.replace('__VERSION__', new Date().toISOString().slice(0, 10) + ' · ' + version.slice(0, 6));
+fs.writeFileSync(dir + '/endless-joyland.html', body);
 const app = dir + '/app';
 fs.mkdirSync(app + '/icons', { recursive: true });
 for (const f of fs.readdirSync(dir + '/src/icons')) fs.copyFileSync(dir + '/src/icons/' + f, app + '/icons/' + f);
@@ -31,7 +32,15 @@ const head = `<!doctype html>
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 `;
 const swReg = `<script>
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+if ('serviceWorker' in navigator) {
+  // Reload once when a newer version takes over, and look for one whenever the app comes back to the screen.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then(reg => {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {}));
+}
 </script>`;
 const page = head + body.replace('<div class="app">', '</head>\n<body>\n<div class="app">') + '\n' + swReg + '\n</body>\n</html>\n';
 fs.writeFileSync(app + '/index.html', page);
@@ -62,10 +71,18 @@ self.addEventListener('activate', e => {
 });
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  const page = e.request.mode === 'navigate' || e.request.destination === 'document';
   e.respondWith(caches.open(CACHE).then(async cache => {
-    const hit = await cache.match(e.request, { ignoreSearch: true });
-    const net = fetch(e.request).then(res => { if (res && (res.ok || res.type === 'opaque')) cache.put(e.request, res.clone()); return res; }).catch(() => hit);
-    return hit || net;
+    const hit = await cache.match(e.request, { ignoreSearch: true }) || (page ? await cache.match('index.html') : null);
+    const net = fetch(e.request, page ? { cache: 'no-cache' } : undefined)
+      .then(res => { if (res && (res.ok || res.type === 'opaque')) cache.put(e.request, res.clone()); return res; });
+    if (page) {
+      // The game page itself: newest version when online, cached copy when offline or slow.
+      const timeout = new Promise(r => setTimeout(() => r(null), 4000));
+      const res = await Promise.race([net.catch(() => null), timeout]);
+      return res || hit || net;
+    }
+    return hit || net.catch(() => hit);
   }));
 });
 `);

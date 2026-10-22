@@ -267,6 +267,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       <div class="view" id="view-stats" hidden>
         <div class="panel"><div class="statgrid" id="statGrid"></div></div>
         <div class="rowbtns"><button class="plain" id="saveOpen">Save code</button><button class="plain" id="helpOpen">How to play</button><button class="plain danger" id="resetOpen">Erase</button></div>
+        <div class="small" style="padding-inline:2px">Game version 2026-10-22 · 1a437a</div>
       </div>
     </div>
 
@@ -1982,7 +1983,15 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
 </script>
 
 <script>
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+if ('serviceWorker' in navigator) {
+  // Reload once when a newer version takes over, and look for one whenever the app comes back to the screen.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then(reg => {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {}));
+}
 </script>
 </body>
 </html>
