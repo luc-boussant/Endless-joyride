@@ -836,6 +836,7 @@
     refresh(false);
     draw(dt);
     if (now - lastSave > 5000) { lastSave = now; save(); }
+    if (now - lastCloudSave > 20000) { lastCloudSave = now; cloudSave(); }
     requestAnimationFrame(frame);
   }
   setInterval(() => {
@@ -845,8 +846,8 @@
       if (dt > 0.9) { lastTick = now; let left = Math.min(dt, 60); while (left > 0) { const h = Math.min(0.5, left); tick(h); left -= h; } save(); }
     }
   }, 1000);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
-  window.addEventListener('pagehide', save);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { save(); cloudSave(); } });
+  window.addEventListener('pagehide', () => { save(); cloudSave(); });
   if (window.ResizeObserver) new ResizeObserver(() => { if (S) layout(); }).observe(scroller);
   else window.addEventListener('resize', () => { if (S) layout(); });
 
@@ -858,11 +859,51 @@
   }
   $('welcomeOk').addEventListener('click', () => closeModal('welcome'));
 
+  // ---------- Account save (Claude link only) ----------
+  // Some viewers (the Claude iPhone app) wipe browser storage between visits, so the park is also
+  // kept in this viewer's private slot of the artifact database when the page runs on claude.ai.
+  let cloudRef = null, cloudBusy = false, lastCloudSave = 0, hadLocal = false;
+  async function cloudSave() {
+    if (!cloudRef || cloudBusy || !S) return;
+    cloudBusy = true;
+    try { await cloudRef.set({ json: JSON.stringify(S), savedAt: Date.now(), lifetime: S.lifetimeEarned }); }
+    catch (e) { /* view-only or offline: keep local save only */ }
+    cloudBusy = false;
+  }
+  async function initCloud() {
+    const use = window.claude && window.claude.use;
+    if (typeof use !== 'function') return;
+    try {
+      const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+      const uid = db && user ? await user.id() : null;
+      if (!uid) return;
+      const ref = db.doc('data/users/' + uid + '/save');
+      const snap = await ref.get();
+      if (snap.exists) {
+        const d = snap.data();
+        const newer = hadLocal ? d.savedAt > (S.lastSeen || 0) + 5000 : (d.lifetime || 0) > S.lifetimeEarned;
+        if (newer && typeof d.json === 'string') {
+          const remote = J.migrate(JSON.parse(d.json));
+          replaceState(remote);
+          const away = (Date.now() - (d.savedAt || Date.now())) / 1000;
+          const r = J.offline(S, away);
+          sel = Math.max(0, builtCount() - 1);
+          refresh(true);
+          if (r && away > 60) showWelcome(r);
+          say(`Welcome back to <b>Park ${S.parkNumber}</b>.`, true);
+        }
+      }
+      cloudRef = ref;
+      cloudSave();
+    } catch (e) { /* no account save on this view */ }
+  }
+
   function start(data) {
     let restored = data && data.state ? J.migrate(data.state) : null;
     const fromHot = !!restored;
     if (!restored) restored = loadSave();
     const fresh = !restored;
+    hadLocal = !fresh;
     S = restored || J.newState();
     layout();
     if (!fresh && !fromHot) {
@@ -878,6 +919,8 @@
     refresh(true);
     lastTick = performance.now();
     requestAnimationFrame(frame);
+    initCloud();
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   }
 
   const hot = window.claude && window.claude.hot;
