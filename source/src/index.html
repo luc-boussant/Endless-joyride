@@ -1,0 +1,272 @@
+<title>Endless Joyland</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@500;600;700;800&display=swap">
+<style>
+/* Layout: one-screen game. Marquee HUD on top, scrollable park map in the middle, a fixed control dock below
+   (phone) or beside it (wide screens). Only the map scrolls. Single "fairground at dusk" theme by design. */
+:root {
+  --night: #121834;
+  --night-2: #1a2246;
+  --night-3: #242e5c;
+  --line: #34407a;
+  --ink: #f7f1e3;
+  --muted: #a9b1d3;
+  --gold: #ffc94a;
+  --gold-deep: #c98f12;
+  --candy: #ff4d6d;
+  --candy-deep: #b8243f;
+  --mint: #3fd9a2;
+  --warn: #ffa53b;
+  --bad: #ff5d6c;
+  --display: "Bungee", "Arial Black", Impact, sans-serif;
+  --body: "Figtree", -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+body {
+  margin: 0; background: var(--night); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.35;
+  font-variant-numeric: tabular-nums; -webkit-user-select: none; user-select: none; touch-action: manipulation;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+.app {
+  height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px 0;
+}
+.pwa .app { padding-top: max(8px, env(safe-area-inset-top, 0px)); }
+
+/* HUD */
+.hud { display: grid; gap: 6px; }
+.brandrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.brand { font-family: var(--display); font-size: 17px; letter-spacing: .03em; color: var(--gold); line-height: 1; text-shadow: 0 0 12px rgba(255, 201, 74, .45); }
+.parkno { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.bulbs { height: 6px; background: radial-gradient(circle at 3px 3px, var(--gold) 2px, transparent 2.6px) 0 0 / 14px 6px repeat-x; opacity: .9; animation: twinkle 1.6s steps(2) infinite; }
+@keyframes twinkle { 50% { background-position: 7px 0; } }
+.kpis { display: grid; grid-template-columns: 1.35fr 1fr 1.2fr auto; gap: 8px; background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 7px 12px; align-items: end; }
+.kpi { min-width: 0; display: flex; flex-direction: column; }
+.kpi .lab { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
+.kpi .val { font-weight: 800; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi.cash .val { font-family: var(--display); font-weight: 400; font-size: 21px; line-height: 1.05; color: var(--gold); }
+.mood { display: inline-flex; gap: 5px; align-items: center; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 8px var(--mint); flex: none; }
+.dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); } .dot.bad { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+
+/* Map */
+.map { position: relative; min-height: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #183d33; }
+.mapscroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+canvas#park { display: block; width: 100%; }
+.chips { position: absolute; left: 8px; right: 8px; top: 8px; display: flex; flex-wrap: wrap; gap: 5px; pointer-events: none; }
+.chip { padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; background: rgba(18, 24, 52, .82); border: 1px solid var(--line); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.chip.gold { background: var(--gold); color: #2a1c00; border-color: transparent; }
+.chip.bad { background: var(--bad); color: #fff; border-color: transparent; }
+.ticker { position: absolute; left: 8px; right: 8px; bottom: 8px; pointer-events: none; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.ticker div { max-width: 100%; padding: 3px 10px; border-radius: 10px; background: rgba(18, 24, 52, .8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.ticker div:first-child { color: var(--ink); }
+.ticker b { color: var(--gold); font-weight: 700; }
+.balloon { position: absolute; width: 50px; height: 66px; border: 0; background: none; padding: 0; z-index: 3; filter: drop-shadow(0 0 10px rgba(255, 201, 74, .6)); }
+.balloon svg { width: 100%; height: 100%; display: block; }
+
+/* Dock */
+.dock { min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.sheet { height: clamp(236px, 38dvh, 300px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
+.view { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.tabbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px 0 max(8px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+.tab { border: 0; background: none; padding: 5px 2px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--muted); font-weight: 700; font-size: 11.5px; position: relative; }
+.tab svg { width: 22px; height: 22px; }
+.tab[aria-selected="true"] { color: var(--gold); }
+.tab .badge { position: absolute; top: 0; right: calc(50% - 22px); min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--candy); color: #fff; font-size: 10px; line-height: 16px; }
+
+.panel { background: var(--night-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; }
+.ridehead { display: grid; grid-template-columns: 34px 44px minmax(0, 1fr) auto 34px; gap: 8px; align-items: center; }
+.nav { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--night-3); font-size: 18px; line-height: 1; display: grid; place-items: center; }
+.ricon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25), 0 0 14px rgba(255,255,255,.08); }
+.rname { font-weight: 800; font-size: 16px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvl { font-family: var(--display); color: var(--candy); font-size: 16px; text-align: right; white-space: nowrap; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stat .lab { font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 800; }
+.stat .v { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.loadrow { display: grid; gap: 4px; }
+.load { height: 6px; border-radius: 4px; background: var(--night); overflow: hidden; }
+.load i { display: block; height: 100%; width: 0; background: var(--mint); border-radius: 4px; transition: width .4s; }
+.load i.warn { background: var(--warn); } .load i.bad { background: var(--bad); }
+.note { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note b { color: var(--gold); }
+.btns { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 6px; }
+.btn {
+  border: 0; border-radius: 12px; padding: 7px 9px 9px; text-align: left; min-width: 0; display: flex; flex-direction: column; gap: 0;
+  background: var(--night-3); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .3); transition: transform .05s;
+}
+.btn:active { transform: translateY(2px); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .3); }
+.btn .t { font-weight: 800; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn .c { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn.primary { background: linear-gradient(var(--candy), #e83a5c); box-shadow: inset 0 -3px 0 var(--candy-deep); color: #fff; }
+.btn.primary .c { color: #ffe3e9; }
+.btn.goldb { background: linear-gradient(var(--gold), #f5b52c); box-shadow: inset 0 -3px 0 var(--gold-deep); color: #2a1c00; }
+.btn.goldb .c { color: #5a3d00; }
+.btn.off { opacity: .5; }
+.btn.max { opacity: .5; }
+.footrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.seg { display: inline-flex; background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
+.seg button { border: 0; background: none; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 12.5px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--night); }
+.count { font-size: 12px; color: var(--muted); font-weight: 600; }
+.lotdesc { font-size: 13px; color: var(--muted); }
+
+.pricebox { display: grid; gap: 0; padding-block: 7px 4px; }
+.pricebox .row1 { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.pricebox b { color: var(--gold); }
+input[type="range"] { width: 100%; accent-color: var(--candy); margin: 2px 0; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.tile { background: var(--night-2); border: 1px solid var(--line); border-radius: 13px; padding: 7px 9px; display: grid; gap: 2px; min-width: 0; text-align: left; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); transition: transform .05s; }
+.tile:active { transform: translateY(2px); }
+.tile .tr { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; }
+.tile h3 { margin: 0; font-size: 13px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tile h3 span { color: var(--candy); }
+.tile .cost { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tile p { margin: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.can { border-color: var(--candy); background: linear-gradient(rgba(255, 77, 109, .16), rgba(255, 77, 109, .06)); }
+.tile.can .cost { color: #fff; background: var(--candy); padding: 0 7px; border-radius: 7px; }
+.tile.gold.can { border-color: var(--gold); background: linear-gradient(rgba(255, 201, 74, .16), rgba(255, 201, 74, .05)); }
+.tile.gold.can .cost { background: var(--gold); color: #2a1c00; }
+.tile.max { opacity: .55; }
+.legacytop { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.big { font-family: var(--display); font-size: 28px; line-height: 1; color: var(--gold); text-shadow: 0 0 14px rgba(255, 201, 74, .4); }
+.small { font-size: 12px; color: var(--muted); }
+.statgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.statgrid div { display: flex; justify-content: space-between; gap: 6px; padding-block: 3px; border-bottom: 1px dashed var(--line); font-size: 12.5px; min-width: 0; }
+.statgrid span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statgrid b { white-space: nowrap; }
+.rowbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.plain { border: 1px solid var(--line); background: var(--night-3); border-radius: 10px; padding: 7px 12px; font-weight: 700; }
+.plain.danger { color: var(--bad); border-color: var(--bad); }
+.plain.go { background: var(--candy); border-color: var(--candy); color: #fff; }
+
+.modal { position: fixed; inset: 0; background: rgba(6, 9, 22, .7); display: grid; place-items: center; z-index: 20; padding: 16px; }
+.modal .panel { width: 100%; max-width: 420px; display: grid; gap: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); -webkit-user-select: text; user-select: text; }
+.modal h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 19px; color: var(--gold); }
+textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid var(--line); background: var(--night); color: var(--ink); padding: 8px; font: 12px ui-monospace, Menlo, monospace; resize: vertical; -webkit-user-select: text; user-select: text; }
+.toasts { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 92px); display: flex; flex-direction: column; gap: 6px; z-index: 15; pointer-events: none; width: min(92vw, 380px); }
+.toast { background: var(--ink); color: var(--night); padding: 8px 14px; border-radius: 12px; font-weight: 700; font-size: 13px; text-align: center; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); animation: pop .25s ease-out; }
+@keyframes pop { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .toast, .bulbs { animation: none; } .load i { transition: none; } }
+
+/* Wide screens: map on the left, dock on the right. */
+@media (min-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr); padding-block: 12px 16px; column-gap: 16px; }
+  .hud { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 620px); align-items: center; justify-content: space-between; }
+  .brandrow { flex-direction: column; align-items: flex-start; }
+  .dock { flex-direction: column-reverse; justify-content: flex-end; }
+  .sheet { height: auto; flex: 1; }
+  .tabbar { border-top: 0; border: 1px solid var(--line); border-radius: 14px; padding: 4px; background: var(--night-2); }
+  .tab { flex-direction: row; justify-content: center; gap: 6px; font-size: 13px; padding: 7px 2px; }
+  .tab svg { width: 18px; height: 18px; }
+  .tab .badge { position: static; }
+  .tiles { grid-template-columns: minmax(0, 1fr); }
+  .bulbs { display: none; }
+}
+@media (max-height: 720px) and (max-width: 899px) {
+  .brandrow, .bulbs { display: none; }
+  .sheet { height: 262px; }
+}
+</style>
+
+<div class="app">
+  <header class="hud">
+    <div class="brandrow"><span class="brand">ENDLESS JOYLAND</span><span class="parkno" id="parkNo">Park 1</span></div>
+    <div class="kpis">
+      <div class="kpi cash"><span class="lab">Cash</span><span class="val" id="kCash">$0</span></div>
+      <div class="kpi"><span class="lab">Income</span><span class="val" id="kInc">$0/s</span></div>
+      <div class="kpi"><span class="lab">Guests</span><span class="val" id="kVis">0</span></div>
+      <div class="kpi"><span class="lab">Mood</span><span class="val mood"><i class="dot" id="kMoodDot"></i><span id="kMood">Happy</span></span></div>
+    </div>
+    <div class="bulbs" aria-hidden="true"></div>
+  </header>
+
+  <section class="map" id="map" aria-label="Your park">
+    <div class="mapscroll" id="mapscroll"><canvas id="park" aria-label="Park map. Tap a ride to manage it."></canvas></div>
+    <div class="chips" id="chips"></div>
+    <div class="ticker" id="ticker" aria-live="polite"></div>
+  </section>
+
+  <section class="dock">
+    <div class="sheet">
+      <div class="view" id="view-rides"></div>
+
+      <div class="view" id="view-park" hidden>
+        <div class="panel pricebox">
+          <div class="row1"><span>Entry ticket <b id="priceVal">$0</b> · <span id="priceLabel">Fair</span></span><span class="small" id="priceEffect"></span></div>
+          <input type="range" id="priceSlider" min="0" max="150" step="1" value="50" aria-label="Entry ticket price">
+        </div>
+        <div class="tiles" id="parkTiles"></div>
+      </div>
+
+      <div class="view" id="view-legacy" hidden>
+        <div class="panel legacytop">
+          <div><div class="big" id="tixHave">0</div><div class="small">golden tickets</div></div>
+          <div class="small" id="tixInfo"></div>
+          <div id="sellBox"><button class="btn goldb" id="sellBtn"><span class="t">Sell park</span><span class="c" id="sellC">+0</span></button></div>
+        </div>
+        <div class="panel" id="sellConfirm" hidden>
+          <div class="footrow"><span>Sell this park for <b id="sellGain"></b>? You start over with your tickets and perks.</span></div>
+          <div class="rowbtns" style="margin-top:8px"><button class="plain go" id="sellYes">Sell it</button><button class="plain" id="sellNo">Keep playing</button></div>
+        </div>
+        <div class="tiles" id="perkTiles"></div>
+      </div>
+
+      <div class="view" id="view-stats" hidden>
+        <div class="panel"><div class="statgrid" id="statGrid"></div></div>
+        <div class="rowbtns"><button class="plain" id="saveOpen">Save code</button><button class="plain" id="helpOpen">How to play</button><button class="plain danger" id="resetOpen">Erase</button></div>
+      </div>
+    </div>
+
+    <nav class="tabbar" role="tablist">
+      <button class="tab" role="tab" data-tab="rides" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="10" r="7"/><path d="M12 3v14M5 10h14M7 5l10 10M17 5 7 15M8 21l4-4 4 4"/></svg>Rides</button>
+      <button class="tab" role="tab" data-tab="park" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"/></svg>Park</button>
+      <button class="tab" role="tab" data-tab="legacy" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 8h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 8v10" stroke-dasharray="2 2"/></svg>Legacy<span class="badge" id="legacyBadge" hidden></span></button>
+      <button class="tab" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Stats</button>
+    </nav>
+  </section>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<div class="modal" id="welcome" hidden>
+  <div class="panel"><h2>Welcome back</h2><p style="margin:0" id="welcomeText"></p><div class="rowbtns"><button class="plain go" id="welcomeOk">Collect</button></div></div>
+</div>
+<div class="modal" id="saveModal" hidden>
+  <div class="panel">
+    <h2>Save code</h2>
+    <div class="small">Your park saves itself on this device. Copy this code to move it to another one.</div>
+    <textarea id="saveText" aria-label="Save code" readonly></textarea>
+    <div class="rowbtns"><button class="plain" id="copyBtn">Copy</button></div>
+    <textarea id="importText" aria-label="Paste a save code" placeholder="Paste a save code here"></textarea>
+    <div class="rowbtns"><button class="plain go" id="importBtn">Load code</button><button class="plain" id="saveClose">Close</button></div>
+    <div class="small" id="importMsg"></div>
+  </div>
+</div>
+<div class="modal" id="resetModal" hidden>
+  <div class="panel"><h2>Erase everything?</h2><p style="margin:0">This deletes your park, golden tickets and perks on this device.</p>
+  <div class="rowbtns"><button class="plain danger" id="resetYes">Erase</button><button class="plain" id="resetNo">Cancel</button></div></div>
+</div>
+<div class="modal" id="helpModal" hidden>
+  <div class="panel">
+    <h2>How to play</h2>
+    <div class="small" style="font-size:13px;line-height:1.5;color:var(--ink)">
+      Build rides on the lots and level them up. More fun brings more guests, and guests pay for every ride.<br>
+      Busy rides grow queues. Add seats or speed them up, or the crowd gets grumpy and stops coming.<br>
+      When the park is full, buy more land in the Park tab. Pop golden balloons for prizes.<br>
+      After $100 M in total earnings, sell your park for golden tickets: permanent bonuses for every park after.
+    </div>
+    <div class="rowbtns"><button class="plain go" id="helpClose">Got it</button></div>
+  </div>
+</div>
+
+<script>/*CORE*/</script>
+<script>/*UI*/</script>

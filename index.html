@@ -1,0 +1,1635 @@
+<!doctype html>
+<html lang="en" class="pwa">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#121834">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Joyland">
+<meta name="description" content="An ad-free amusement park idle game.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<title>Endless Joyland</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@500;600;700;800&display=swap">
+<style>
+/* Layout: one-screen game. Marquee HUD on top, scrollable park map in the middle, a fixed control dock below
+   (phone) or beside it (wide screens). Only the map scrolls. Single "fairground at dusk" theme by design. */
+:root {
+  --night: #121834;
+  --night-2: #1a2246;
+  --night-3: #242e5c;
+  --line: #34407a;
+  --ink: #f7f1e3;
+  --muted: #a9b1d3;
+  --gold: #ffc94a;
+  --gold-deep: #c98f12;
+  --candy: #ff4d6d;
+  --candy-deep: #b8243f;
+  --mint: #3fd9a2;
+  --warn: #ffa53b;
+  --bad: #ff5d6c;
+  --display: "Bungee", "Arial Black", Impact, sans-serif;
+  --body: "Figtree", -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+body {
+  margin: 0; background: var(--night); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.35;
+  font-variant-numeric: tabular-nums; -webkit-user-select: none; user-select: none; touch-action: manipulation;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+.app {
+  height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px 0;
+}
+.pwa .app { padding-top: max(8px, env(safe-area-inset-top, 0px)); }
+
+/* HUD */
+.hud { display: grid; gap: 6px; }
+.brandrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.brand { font-family: var(--display); font-size: 17px; letter-spacing: .03em; color: var(--gold); line-height: 1; text-shadow: 0 0 12px rgba(255, 201, 74, .45); }
+.parkno { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.bulbs { height: 6px; background: radial-gradient(circle at 3px 3px, var(--gold) 2px, transparent 2.6px) 0 0 / 14px 6px repeat-x; opacity: .9; animation: twinkle 1.6s steps(2) infinite; }
+@keyframes twinkle { 50% { background-position: 7px 0; } }
+.kpis { display: grid; grid-template-columns: 1.35fr 1fr 1.2fr auto; gap: 8px; background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 7px 12px; align-items: end; }
+.kpi { min-width: 0; display: flex; flex-direction: column; }
+.kpi .lab { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
+.kpi .val { font-weight: 800; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi.cash .val { font-family: var(--display); font-weight: 400; font-size: 21px; line-height: 1.05; color: var(--gold); }
+.mood { display: inline-flex; gap: 5px; align-items: center; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 8px var(--mint); flex: none; }
+.dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); } .dot.bad { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+
+/* Map */
+.map { position: relative; min-height: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #183d33; }
+.mapscroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+canvas#park { display: block; width: 100%; }
+.chips { position: absolute; left: 8px; right: 8px; top: 8px; display: flex; flex-wrap: wrap; gap: 5px; pointer-events: none; }
+.chip { padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; background: rgba(18, 24, 52, .82); border: 1px solid var(--line); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.chip.gold { background: var(--gold); color: #2a1c00; border-color: transparent; }
+.chip.bad { background: var(--bad); color: #fff; border-color: transparent; }
+.ticker { position: absolute; left: 8px; right: 8px; bottom: 8px; pointer-events: none; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.ticker div { max-width: 100%; padding: 3px 10px; border-radius: 10px; background: rgba(18, 24, 52, .8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.ticker div:first-child { color: var(--ink); }
+.ticker b { color: var(--gold); font-weight: 700; }
+.balloon { position: absolute; width: 50px; height: 66px; border: 0; background: none; padding: 0; z-index: 3; filter: drop-shadow(0 0 10px rgba(255, 201, 74, .6)); }
+.balloon svg { width: 100%; height: 100%; display: block; }
+
+/* Dock */
+.dock { min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.sheet { height: clamp(236px, 38dvh, 300px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
+.view { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.tabbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px 0 max(8px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+.tab { border: 0; background: none; padding: 5px 2px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--muted); font-weight: 700; font-size: 11.5px; position: relative; }
+.tab svg { width: 22px; height: 22px; }
+.tab[aria-selected="true"] { color: var(--gold); }
+.tab .badge { position: absolute; top: 0; right: calc(50% - 22px); min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--candy); color: #fff; font-size: 10px; line-height: 16px; }
+
+.panel { background: var(--night-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; }
+.ridehead { display: grid; grid-template-columns: 34px 44px minmax(0, 1fr) auto 34px; gap: 8px; align-items: center; }
+.nav { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--night-3); font-size: 18px; line-height: 1; display: grid; place-items: center; }
+.ricon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25), 0 0 14px rgba(255,255,255,.08); }
+.rname { font-weight: 800; font-size: 16px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lvl { font-family: var(--display); color: var(--candy); font-size: 16px; text-align: right; white-space: nowrap; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stat .lab { font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 800; }
+.stat .v { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.loadrow { display: grid; gap: 4px; }
+.load { height: 6px; border-radius: 4px; background: var(--night); overflow: hidden; }
+.load i { display: block; height: 100%; width: 0; background: var(--mint); border-radius: 4px; transition: width .4s; }
+.load i.warn { background: var(--warn); } .load i.bad { background: var(--bad); }
+.note { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note b { color: var(--gold); }
+.btns { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 6px; }
+.btn {
+  border: 0; border-radius: 12px; padding: 7px 9px 9px; text-align: left; min-width: 0; display: flex; flex-direction: column; gap: 0;
+  background: var(--night-3); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .3); transition: transform .05s;
+}
+.btn:active { transform: translateY(2px); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .3); }
+.btn .t { font-weight: 800; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn .c { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn.primary { background: linear-gradient(var(--candy), #e83a5c); box-shadow: inset 0 -3px 0 var(--candy-deep); color: #fff; }
+.btn.primary .c { color: #ffe3e9; }
+.btn.goldb { background: linear-gradient(var(--gold), #f5b52c); box-shadow: inset 0 -3px 0 var(--gold-deep); color: #2a1c00; }
+.btn.goldb .c { color: #5a3d00; }
+.btn.off { opacity: .5; }
+.btn.max { opacity: .5; }
+.footrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.seg { display: inline-flex; background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
+.seg button { border: 0; background: none; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 12.5px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--night); }
+.count { font-size: 12px; color: var(--muted); font-weight: 600; }
+.lotdesc { font-size: 13px; color: var(--muted); }
+
+.pricebox { display: grid; gap: 0; padding-block: 7px 4px; }
+.pricebox .row1 { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.pricebox b { color: var(--gold); }
+input[type="range"] { width: 100%; accent-color: var(--candy); margin: 2px 0; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.tile { background: var(--night-2); border: 1px solid var(--line); border-radius: 13px; padding: 7px 9px; display: grid; gap: 2px; min-width: 0; text-align: left; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); transition: transform .05s; }
+.tile:active { transform: translateY(2px); }
+.tile .tr { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; }
+.tile h3 { margin: 0; font-size: 13px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tile h3 span { color: var(--candy); }
+.tile .cost { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tile p { margin: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.can { border-color: var(--candy); background: linear-gradient(rgba(255, 77, 109, .16), rgba(255, 77, 109, .06)); }
+.tile.can .cost { color: #fff; background: var(--candy); padding: 0 7px; border-radius: 7px; }
+.tile.gold.can { border-color: var(--gold); background: linear-gradient(rgba(255, 201, 74, .16), rgba(255, 201, 74, .05)); }
+.tile.gold.can .cost { background: var(--gold); color: #2a1c00; }
+.tile.max { opacity: .55; }
+.legacytop { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.big { font-family: var(--display); font-size: 28px; line-height: 1; color: var(--gold); text-shadow: 0 0 14px rgba(255, 201, 74, .4); }
+.small { font-size: 12px; color: var(--muted); }
+.statgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.statgrid div { display: flex; justify-content: space-between; gap: 6px; padding-block: 3px; border-bottom: 1px dashed var(--line); font-size: 12.5px; min-width: 0; }
+.statgrid span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statgrid b { white-space: nowrap; }
+.rowbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.plain { border: 1px solid var(--line); background: var(--night-3); border-radius: 10px; padding: 7px 12px; font-weight: 700; }
+.plain.danger { color: var(--bad); border-color: var(--bad); }
+.plain.go { background: var(--candy); border-color: var(--candy); color: #fff; }
+
+.modal { position: fixed; inset: 0; background: rgba(6, 9, 22, .7); display: grid; place-items: center; z-index: 20; padding: 16px; }
+.modal .panel { width: 100%; max-width: 420px; display: grid; gap: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); -webkit-user-select: text; user-select: text; }
+.modal h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 19px; color: var(--gold); }
+textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid var(--line); background: var(--night); color: var(--ink); padding: 8px; font: 12px ui-monospace, Menlo, monospace; resize: vertical; -webkit-user-select: text; user-select: text; }
+.toasts { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 92px); display: flex; flex-direction: column; gap: 6px; z-index: 15; pointer-events: none; width: min(92vw, 380px); }
+.toast { background: var(--ink); color: var(--night); padding: 8px 14px; border-radius: 12px; font-weight: 700; font-size: 13px; text-align: center; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); animation: pop .25s ease-out; }
+@keyframes pop { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .toast, .bulbs { animation: none; } .load i { transition: none; } }
+
+/* Wide screens: map on the left, dock on the right. */
+@media (min-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr); padding-block: 12px 16px; column-gap: 16px; }
+  .hud { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 620px); align-items: center; justify-content: space-between; }
+  .brandrow { flex-direction: column; align-items: flex-start; }
+  .dock { flex-direction: column-reverse; justify-content: flex-end; }
+  .sheet { height: auto; flex: 1; }
+  .tabbar { border-top: 0; border: 1px solid var(--line); border-radius: 14px; padding: 4px; background: var(--night-2); }
+  .tab { flex-direction: row; justify-content: center; gap: 6px; font-size: 13px; padding: 7px 2px; }
+  .tab svg { width: 18px; height: 18px; }
+  .tab .badge { position: static; }
+  .tiles { grid-template-columns: minmax(0, 1fr); }
+  .bulbs { display: none; }
+}
+@media (max-height: 720px) and (max-width: 899px) {
+  .brandrow, .bulbs { display: none; }
+  .sheet { height: 262px; }
+}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="hud">
+    <div class="brandrow"><span class="brand">ENDLESS JOYLAND</span><span class="parkno" id="parkNo">Park 1</span></div>
+    <div class="kpis">
+      <div class="kpi cash"><span class="lab">Cash</span><span class="val" id="kCash">$0</span></div>
+      <div class="kpi"><span class="lab">Income</span><span class="val" id="kInc">$0/s</span></div>
+      <div class="kpi"><span class="lab">Guests</span><span class="val" id="kVis">0</span></div>
+      <div class="kpi"><span class="lab">Mood</span><span class="val mood"><i class="dot" id="kMoodDot"></i><span id="kMood">Happy</span></span></div>
+    </div>
+    <div class="bulbs" aria-hidden="true"></div>
+  </header>
+
+  <section class="map" id="map" aria-label="Your park">
+    <div class="mapscroll" id="mapscroll"><canvas id="park" aria-label="Park map. Tap a ride to manage it."></canvas></div>
+    <div class="chips" id="chips"></div>
+    <div class="ticker" id="ticker" aria-live="polite"></div>
+  </section>
+
+  <section class="dock">
+    <div class="sheet">
+      <div class="view" id="view-rides"></div>
+
+      <div class="view" id="view-park" hidden>
+        <div class="panel pricebox">
+          <div class="row1"><span>Entry ticket <b id="priceVal">$0</b> · <span id="priceLabel">Fair</span></span><span class="small" id="priceEffect"></span></div>
+          <input type="range" id="priceSlider" min="0" max="150" step="1" value="50" aria-label="Entry ticket price">
+        </div>
+        <div class="tiles" id="parkTiles"></div>
+      </div>
+
+      <div class="view" id="view-legacy" hidden>
+        <div class="panel legacytop">
+          <div><div class="big" id="tixHave">0</div><div class="small">golden tickets</div></div>
+          <div class="small" id="tixInfo"></div>
+          <div id="sellBox"><button class="btn goldb" id="sellBtn"><span class="t">Sell park</span><span class="c" id="sellC">+0</span></button></div>
+        </div>
+        <div class="panel" id="sellConfirm" hidden>
+          <div class="footrow"><span>Sell this park for <b id="sellGain"></b>? You start over with your tickets and perks.</span></div>
+          <div class="rowbtns" style="margin-top:8px"><button class="plain go" id="sellYes">Sell it</button><button class="plain" id="sellNo">Keep playing</button></div>
+        </div>
+        <div class="tiles" id="perkTiles"></div>
+      </div>
+
+      <div class="view" id="view-stats" hidden>
+        <div class="panel"><div class="statgrid" id="statGrid"></div></div>
+        <div class="rowbtns"><button class="plain" id="saveOpen">Save code</button><button class="plain" id="helpOpen">How to play</button><button class="plain danger" id="resetOpen">Erase</button></div>
+      </div>
+    </div>
+
+    <nav class="tabbar" role="tablist">
+      <button class="tab" role="tab" data-tab="rides" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="10" r="7"/><path d="M12 3v14M5 10h14M7 5l10 10M17 5 7 15M8 21l4-4 4 4"/></svg>Rides</button>
+      <button class="tab" role="tab" data-tab="park" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"/></svg>Park</button>
+      <button class="tab" role="tab" data-tab="legacy" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 8h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 8v10" stroke-dasharray="2 2"/></svg>Legacy<span class="badge" id="legacyBadge" hidden></span></button>
+      <button class="tab" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Stats</button>
+    </nav>
+  </section>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<div class="modal" id="welcome" hidden>
+  <div class="panel"><h2>Welcome back</h2><p style="margin:0" id="welcomeText"></p><div class="rowbtns"><button class="plain go" id="welcomeOk">Collect</button></div></div>
+</div>
+<div class="modal" id="saveModal" hidden>
+  <div class="panel">
+    <h2>Save code</h2>
+    <div class="small">Your park saves itself on this device. Copy this code to move it to another one.</div>
+    <textarea id="saveText" aria-label="Save code" readonly></textarea>
+    <div class="rowbtns"><button class="plain" id="copyBtn">Copy</button></div>
+    <textarea id="importText" aria-label="Paste a save code" placeholder="Paste a save code here"></textarea>
+    <div class="rowbtns"><button class="plain go" id="importBtn">Load code</button><button class="plain" id="saveClose">Close</button></div>
+    <div class="small" id="importMsg"></div>
+  </div>
+</div>
+<div class="modal" id="resetModal" hidden>
+  <div class="panel"><h2>Erase everything?</h2><p style="margin:0">This deletes your park, golden tickets and perks on this device.</p>
+  <div class="rowbtns"><button class="plain danger" id="resetYes">Erase</button><button class="plain" id="resetNo">Cancel</button></div></div>
+</div>
+<div class="modal" id="helpModal" hidden>
+  <div class="panel">
+    <h2>How to play</h2>
+    <div class="small" style="font-size:13px;line-height:1.5;color:var(--ink)">
+      Build rides on the lots and level them up. More fun brings more guests, and guests pay for every ride.<br>
+      Busy rides grow queues. Add seats or speed them up, or the crowd gets grumpy and stops coming.<br>
+      When the park is full, buy more land in the Park tab. Pop golden balloons for prizes.<br>
+      After $100 M in total earnings, sell your park for golden tickets: permanent bonuses for every park after.
+    </div>
+    <div class="rowbtns"><button class="plain go" id="helpClose">Got it</button></div>
+  </div>
+</div>
+
+<script>// Endless Joyland: game rules and simulation. No DOM here, so it also runs in Node for balance tests.
+(function (root) {
+  'use strict';
+
+  // ---------- Tunables ----------
+  const STAY = 90;            // average seconds a visitor spends in the park
+  const RIDE_EVERY = 15;      // a visitor wants a ride every N seconds
+  const BASE_TOLERANCE = 60;  // seconds of queue a visitor accepts before getting grumpy
+  const LEVEL_GROWTH = 1.14;
+  const SEAT_GROWTH = 1.32;
+  const SPEED_GROWTH = 2.2;
+  const MAX_SPEED = 12;
+  const TICKET_SCALE = 1e8;   // golden tickets = floor(sqrt(lifetime / TICKET_SCALE))
+
+  // [name, icon, seats, cycle seconds, water ride]
+  const HANDCRAFTED = [
+    ['Carousel', '🎠', 12, 8, 0],
+    ['Teacups', '☕', 16, 10, 0],
+    ['Bumper Cars', '🚗', 20, 12, 0],
+    ['Ferris Wheel', '🎡', 48, 20, 0],
+    ['Haunted House', '👻', 30, 15, 0],
+    ['Log Flume', '🛶', 24, 18, 1],
+    ['Pirate Ship', '⛵', 40, 16, 0],
+    ['Wooden Coaster', '🎢', 28, 24, 0],
+    ['Drop Tower', '🗼', 16, 12, 0],
+    ['River Rapids', '🌊', 32, 22, 1],
+    ['Hyper Coaster', '⚡', 36, 30, 0],
+    ['Space Launch', '🚀', 24, 26, 0],
+  ];
+  const PREFIX = ['Mega', 'Cosmic', 'Thunder', 'Twisted', 'Quantum', 'Midnight', 'Volcano', 'Galactic', 'Infinity', 'Crystal', 'Phantom', 'Aurora'];
+  const KINDS = [
+    ['Coaster', '🎢', 30, 26, 0], ['Spinner', '🌀', 24, 14, 0], ['Drop', '🗼', 18, 12, 0], ['Splash', '🌊', 30, 20, 1],
+    ['Wheel', '🎡', 50, 22, 0], ['Dark Ride', '🏰', 28, 18, 0], ['Swing', '🪂', 32, 16, 0], ['Rocket', '🚀', 22, 24, 0],
+  ];
+  const ROMAN = ['', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X'];
+
+  const defCache = [];
+  function rideDef(i) {
+    if (defCache[i]) return defCache[i];
+    let name, icon, seats, cycle, water;
+    if (i < HANDCRAFTED.length) {
+      [name, icon, seats, cycle, water] = HANDCRAFTED[i];
+    } else {
+      const j = i - HANDCRAFTED.length;
+      const k = KINDS[(j * 3) % KINDS.length];
+      const gen = Math.floor(j / PREFIX.length);
+      name = PREFIX[j % PREFIX.length] + ' ' + k[0] + (gen < ROMAN.length ? ROMAN[gen] : ' #' + (gen + 1));
+      [, icon, seats, cycle, water] = k;
+    }
+    const d = {
+      i, name, icon, seats, cycle, water: !!water,
+      cost0: 12 * Math.pow(12, i),
+      fun0: Math.pow(2.6, i),
+      price0: Math.pow(3, i),
+      thr0: Math.pow(1.7, i),
+    };
+    defCache[i] = d;
+    return d;
+  }
+
+  // Ride level milestones: each one doubles ticket price and adds 50% fun.
+  const MILESTONES = [10, 25, 50, 75, 100];
+  function milestonesPassed(lvl) {
+    let m = 0;
+    for (const t of MILESTONES) if (lvl >= t) m++;
+    if (lvl >= 150) m += Math.floor((lvl - 100) / 50);
+    return m;
+  }
+  function nextMilestone(lvl) {
+    for (const t of MILESTONES) if (lvl < t) return t;
+    return 100 + 50 * (Math.floor((lvl - 100) / 50) + 1);
+  }
+
+  // ---------- Park-wide upgrades ----------
+  const PARK_UPGRADES = [
+    { id: 'land', name: 'Buy more land', desc: 'Park capacity ×1.6', base: 250, growth: 3.2 },
+    { id: 'food', name: 'Snack stands', desc: 'Visitors spend more on food and drinks between rides', base: 80, growth: 1.6 },
+    { id: 'mascot', name: 'Mascot parades', desc: '+12% visitor arrivals', base: 400, growth: 1.9 },
+    { id: 'crew', name: 'Ride crew training', desc: '+10% throughput on every ride', base: 500, growth: 1.85 },
+    { id: 'comfort', name: 'Shade, benches & restrooms', desc: 'Visitors tolerate +15 s more queueing', base: 300, growth: 2.1, max: 20 },
+    { id: 'night', name: 'Night security', desc: '+1 h offline time and +2.5% offline earnings', base: 2000, growth: 3, max: 22 },
+  ];
+  const UPG = Object.fromEntries(PARK_UPGRADES.map(u => [u.id, u]));
+
+  // ---------- Legacy perks (bought with golden tickets, kept forever) ----------
+  const PERKS = [
+    { id: 'seed', name: 'Founder’s fund', desc: 'Start each new park with more cash', base: 3, growth: 2 },
+    { id: 'fame', name: 'Famous name', desc: '+25% visitor arrivals', base: 5, growth: 1.8 },
+    { id: 'thrift', name: 'Bulk contractors', desc: 'All ride upgrades cost 5% less', base: 8, growth: 2.2, max: 10 },
+    { id: 'patience', name: 'Loyal fans', desc: 'Visitors tolerate +20 s more queueing', base: 6, growth: 2, max: 10 },
+  ];
+  const PERK = Object.fromEntries(PERKS.map(p => [p.id, p]));
+
+  function newRide() { return { lvl: 0, cap: 0, spd: 0, queue: 0 }; }
+
+  function newState(keep) {
+    const s = {
+      v: 1,
+      cash: 15,
+      time: 0,
+      rides: [newRide()],
+      park: { land: 0, food: 0, mascot: 0, crew: 0, comfort: 0, night: 0 },
+      priceRatio: 0.5,
+      inPark: 0,
+      satisfaction: 1,
+      runEarned: 0,
+      lifetimeEarned: 0,
+      ticketsEarned: 0,     // tickets ever earned from selling parks
+      ticketsSpent: 0,
+      perks: { seed: 0, fame: 0, thrift: 0, patience: 0 },
+      parkNumber: 1,
+      totalVisitors: 0,
+      runVisitors: 0,
+      bestIncome: 0,
+      effects: [],          // {type, until}
+      nextEventAt: 120,
+      nextBalloonAt: 50,
+      rate: { rides: 0, gate: 0, food: 0, arrivals: 0 },
+      lastSeen: Date.now(),
+      created: Date.now(),
+    };
+    if (keep) {
+      for (const k of ['lifetimeEarned', 'ticketsEarned', 'ticketsSpent', 'totalVisitors', 'bestIncome', 'created']) s[k] = keep[k];
+      s.perks = Object.assign({}, s.perks, keep.perks);
+      s.parkNumber = (keep.parkNumber || 1) + 1;
+      s.cash = 15 + seedCash(s.perks.seed);
+    }
+    return s;
+  }
+
+  function seedCash(lvl) { return lvl ? 500 * Math.pow(12, lvl - 1) : 0; }
+
+  // Older or partial saves get any missing fields filled in.
+  function migrate(raw) {
+    const s = newState();
+    if (!raw || typeof raw !== 'object') return s;
+    for (const k of Object.keys(s)) if (raw[k] !== undefined) s[k] = raw[k];
+    s.park = Object.assign(newState().park, raw.park || {});
+    s.perks = Object.assign(newState().perks, raw.perks || {});
+    s.rate = Object.assign(newState().rate, raw.rate || {});
+    if (!Array.isArray(s.rides) || !s.rides.length) s.rides = [newRide()];
+    s.rides = s.rides.map(r => Object.assign(newRide(), r));
+    if (!Array.isArray(s.effects)) s.effects = [];
+    for (const k of ['cash', 'inPark', 'runEarned', 'lifetimeEarned']) if (!isFinite(s[k])) s[k] = 0;
+    return s;
+  }
+
+  // ---------- Derived numbers ----------
+  function tickets(s) { return s.ticketsEarned - s.ticketsSpent; }
+  function hasEffect(s, type) { return s.effects.some(e => e.type === type && e.until > s.time); }
+
+  function globals(s) {
+    const t = s.ticketsEarned; // every ticket ever earned counts, spent or not
+    return {
+      incomeMult: 1 + 0.03 * t,
+      arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t),
+      crewMult: 1 + 0.1 * s.park.crew,
+      tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience,
+      capacity: Math.floor(60 * Math.pow(1.6, s.park.land)),
+      foodRate: 0.04 * (1 - Math.pow(0.93, s.park.food)),
+      costMult: Math.pow(0.95, s.perks.thrift),
+    };
+  }
+
+  function rideStats(s, i, g) {
+    const r = s.rides[i];
+    if (!r || !r.lvl) return null;
+    const d = rideDef(i);
+    const m = milestonesPassed(r.lvl);
+    const heat = d.water && hasEffect(s, 'heat');
+    return {
+      fun: d.fun0 * r.lvl * Math.pow(1.5, m) * (heat ? 3 : 1),
+      price: d.price0 * (1 + 0.15 * (r.lvl - 1)) * Math.pow(2, m) * g.incomeMult,
+      throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.02 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * g.crewMult,
+    };
+  }
+
+  function snapshot(s) {
+    const g = globals(s);
+    const stats = s.rides.map((_, i) => rideStats(s, i, g));
+    let appeal = 0, priceW = 0;
+    for (const st of stats) if (st) { appeal += st.fun; priceW += st.fun * st.price; }
+    const avgPrice = appeal ? priceW / appeal : 1;
+    const fair = 2 * avgPrice;
+    const ticketPrice = s.priceRatio * fair;
+    const priceFactor = 1 / (1 + Math.pow(s.priceRatio, 3));
+    let eventMult = 1;
+    if (hasEffect(s, 'sunny')) eventMult *= 1.5;
+    if (hasEffect(s, 'celebrity')) eventMult *= 2;
+    if (hasEffect(s, 'rush')) eventMult *= 3;
+    if (hasEffect(s, 'rain')) eventMult *= 0.7;
+    const satFactor = 0.25 + 0.75 * s.satisfaction;
+    const lambda = appeal ? 0.12 * Math.pow(appeal, 0.85) * g.arrivalMult * priceFactor * satFactor * eventMult : 0;
+    return { g, stats, appeal, avgPrice, fair, ticketPrice, priceFactor, lambda, eventMult, satFactor };
+  }
+
+  function priceLabel(ratio) {
+    if (ratio <= 0.001) return 'Free entry';
+    if (ratio < 0.35) return 'A bargain';
+    if (ratio < 0.65) return 'Fair';
+    if (ratio < 0.95) return 'A bit pricey';
+    if (ratio < 1.4) return 'Expensive';
+    return 'Outrageous';
+  }
+
+  // ---------- Costs ----------
+  function geoSum(c0, r, n) { return r === 1 ? c0 * n : c0 * (Math.pow(r, n) - 1) / (r - 1); }
+  function geoMax(c0, r, cash) { return cash < c0 ? 0 : Math.floor(Math.log(cash * (r - 1) / c0 + 1) / Math.log(r)); }
+
+  function levelCost(s, i, n) {
+    const r = s.rides[i], d = rideDef(i), g = globals(s);
+    return geoSum(d.cost0 * Math.pow(LEVEL_GROWTH, r.lvl) * g.costMult, LEVEL_GROWTH, n);
+  }
+  function maxLevels(s, i) {
+    const r = s.rides[i], d = rideDef(i), g = globals(s);
+    return geoMax(d.cost0 * Math.pow(LEVEL_GROWTH, r.lvl) * g.costMult, LEVEL_GROWTH, s.cash);
+  }
+  function seatCost(s, i) { return rideDef(i).cost0 * 2 * Math.pow(SEAT_GROWTH, s.rides[i].cap) * globals(s).costMult; }
+  function speedCost(s, i) {
+    const r = s.rides[i];
+    return r.spd >= MAX_SPEED ? Infinity : rideDef(i).cost0 * 10 * Math.pow(SPEED_GROWTH, r.spd) * globals(s).costMult;
+  }
+  function parkCost(s, id) {
+    const u = UPG[id], l = s.park[id];
+    return u.max !== undefined && l >= u.max ? Infinity : u.base * Math.pow(u.growth, l);
+  }
+  function perkCost(s, id) {
+    const p = PERK[id], l = s.perks[id];
+    return p.max !== undefined && l >= p.max ? Infinity : Math.ceil(p.base * Math.pow(p.growth, l));
+  }
+
+  // ---------- Actions ----------
+  function spend(s, c) { if (!(c <= s.cash)) return false; s.cash -= c; return true; }
+  function buyLevels(s, i, n) {
+    if (n <= 0) return false;
+    if (!spend(s, levelCost(s, i, n))) return false;
+    const r = s.rides[i];
+    const built = r.lvl === 0;
+    r.lvl += n;
+    if (built && i === s.rides.length - 1) s.rides.push(newRide());
+    return true;
+  }
+  function buySeats(s, i) { if (!s.rides[i].lvl || !spend(s, seatCost(s, i))) return false; s.rides[i].cap++; return true; }
+  function buySpeed(s, i) { if (!s.rides[i].lvl || !spend(s, speedCost(s, i))) return false; s.rides[i].spd++; return true; }
+  function buyPark(s, id) { if (!spend(s, parkCost(s, id))) return false; s.park[id]++; return true; }
+  function buyPerk(s, id) {
+    const c = perkCost(s, id);
+    if (!(c <= tickets(s))) return false;
+    s.ticketsSpent += c; s.perks[id]++;
+    return true;
+  }
+
+  function ticketsTotalFor(lifetime) { return Math.floor(Math.sqrt(Math.max(0, lifetime) / TICKET_SCALE)); }
+  function pendingTickets(s) { return Math.max(0, ticketsTotalFor(s.lifetimeEarned) - s.ticketsEarned); }
+  function sellPark(s) {
+    const gain = pendingTickets(s);
+    if (gain < 1) return null;
+    const keep = Object.assign({}, s, { ticketsEarned: s.ticketsEarned + gain });
+    return { state: newState(keep), gain };
+  }
+
+  function offlineLimits(s) {
+    return { hours: 2 + s.park.night, eff: 0.5 + 0.025 * s.park.night };
+  }
+
+  // ---------- Simulation ----------
+  function poisson(mean, rnd) {
+    if (mean <= 0) return 0;
+    if (mean > 40) return Math.max(0, Math.round(mean + Math.sqrt(mean) * gauss(rnd)));
+    const L = Math.exp(-mean);
+    let k = 0, p = 1;
+    do { k++; p *= rnd(); } while (p > L);
+    return k - 1;
+  }
+  function gauss(rnd) { return Math.sqrt(-2 * Math.log(rnd() || 1e-9)) * Math.cos(2 * Math.PI * rnd()); }
+
+  const GROUPS = [[1, 0.24], [2, 0.32], [3, 0.14], [4, 0.18], [5, 0.08], [6, 0.04]];
+  const AVG_GROUP = GROUPS.reduce((a, [n, p]) => a + n * p, 0);
+  function groupSize(rnd) {
+    let x = rnd();
+    for (const [n, p] of GROUPS) { if ((x -= p) <= 0) return n; }
+    return 2;
+  }
+
+  // Advance the park by dt seconds. With rnd, arrivals are random groups; without, expected values are used.
+  // Returns what happened so the UI can animate it.
+  function step(s, dt, rnd) {
+    const snap = snapshot(s);
+    const { g, stats } = snap;
+    const out = { groups: [], earned: 0, rideEarned: [], turnedAway: 0 };
+
+    // Arrivals
+    let arrivals;
+    if (rnd) {
+      const nGroups = poisson(snap.lambda * dt / AVG_GROUP, rnd);
+      arrivals = 0;
+      if (nGroups > 30) arrivals = Math.round(nGroups * AVG_GROUP);
+      else for (let k = 0; k < nGroups; k++) { const n = groupSize(rnd); arrivals += n; out.groups.push(n); }
+    } else {
+      arrivals = snap.lambda * dt;
+    }
+    const room = Math.max(0, g.capacity - s.inPark);
+    if (arrivals > room) { out.turnedAway = arrivals - room; arrivals = room; }
+    s.inPark += arrivals;
+    const gate = arrivals * snap.ticketPrice * g.incomeMult;
+
+    // Rides: demand is shared by fun, queues fill when demand beats throughput.
+    const demandTotal = s.inPark / RIDE_EVERY;
+    let rideMoney = 0, satNum = 0, satDen = 0;
+    for (let i = 0; i < stats.length; i++) {
+      const st = stats[i];
+      out.rideEarned[i] = 0;
+      if (!st) continue;
+      const r = s.rides[i];
+      const demand = snap.appeal ? demandTotal * st.fun / snap.appeal : 0;
+      const maxQueue = st.throughput * g.tolerance * 3;
+      let incoming = demand * dt;
+      const space = Math.max(0, maxQueue - r.queue);
+      const balked = Math.max(0, incoming - space);
+      incoming -= balked;
+      const available = r.queue + incoming;
+      const served = Math.min(available, st.throughput * dt);
+      r.queue = available - served;
+      const money = served * st.price;
+      out.rideEarned[i] = money;
+      rideMoney += money;
+      const wait = r.queue / st.throughput;
+      let sat = wait <= g.tolerance ? 1 : Math.max(0, 1 - (wait - g.tolerance) / (2 * g.tolerance));
+      if (demand > 0 && balked > 0) sat *= Math.max(0, 1 - balked / (demand * dt));
+      r.wait = wait;
+      r.util = st.throughput ? demand / st.throughput : 0;
+      satNum += demand * sat; satDen += demand;
+    }
+    const food = s.inPark * g.foodRate * snap.avgPrice * dt;
+
+    // Departures
+    const leaving = rnd ? Math.min(s.inPark, poisson(s.inPark * dt / STAY, rnd)) : s.inPark * dt / STAY;
+    s.inPark = Math.max(0, s.inPark - leaving);
+
+    // Satisfaction drifts toward the current mood of the crowd.
+    const target = satDen ? satNum / satDen : 1;
+    s.satisfaction += (target - s.satisfaction) * Math.min(1, dt / 20);
+
+    const earned = gate + rideMoney + food;
+    s.cash += earned; s.runEarned += earned; s.lifetimeEarned += earned;
+    s.totalVisitors += arrivals; s.runVisitors += arrivals;
+    s.time += dt;
+    s.effects = s.effects.filter(e => e.until > s.time);
+
+    const a = Math.min(1, dt / 5);
+    s.rate.rides += (rideMoney / dt - s.rate.rides) * a;
+    s.rate.gate += (gate / dt - s.rate.gate) * a;
+    s.rate.food += (food / dt - s.rate.food) * a;
+    s.rate.arrivals += (arrivals / dt - s.rate.arrivals) * a;
+    const inc = s.rate.rides + s.rate.gate + s.rate.food;
+    if (inc > s.bestIncome) s.bestIncome = inc;
+
+    out.earned = earned;
+    out.arrivals = arrivals;
+    out.leaving = leaving;
+    return out;
+  }
+
+  // Offline progress: settle the park deterministically, then pay the steady income for the rest.
+  function offline(s, seconds) {
+    const lim = offlineLimits(s);
+    const capped = Math.min(seconds, lim.hours * 3600);
+    if (capped < 10) return null;
+    const cash0 = s.cash, vis0 = s.totalVisitors;
+    const settle = Math.min(capped, 300);
+    let t = 0, tail = 0, tailT = 0;
+    while (t < settle) {
+      const before = s.cash;
+      step(s, 1);
+      t += 1;
+      if (t > settle - 60) { tail += s.cash - before; tailT += 1; }
+    }
+    const rest = capped - settle;
+    const perSec = tailT ? tail / tailT : 0;
+    const extra = perSec * rest * lim.eff;
+    const extraVis = s.rate.arrivals * rest;
+    s.cash += extra; s.runEarned += extra; s.lifetimeEarned += extra;
+    s.totalVisitors += extraVis; s.runVisitors += extraVis;
+    s.time += rest;
+    s.effects = [];
+    s.nextEventAt = s.time + 60; s.nextBalloonAt = s.time + 30;
+    return { seconds, counted: capped, earned: s.cash - cash0, visitors: s.totalVisitors - vis0, eff: lim.eff, hours: lim.hours };
+  }
+
+  const EVENTS = [
+    { type: 'sunny', w: 4, dur: 60, title: 'Perfect weather', text: 'Sunshine all round. Visitor arrivals ×1.5.' },
+    { type: 'celebrity', w: 2, dur: 45, title: 'A celebrity is visiting', text: 'Fans are flooding in. Arrivals ×2.' },
+    { type: 'heat', w: 2, dur: 60, title: 'Heat wave', text: 'Water rides are 3× as popular.', needsWater: true },
+    { type: 'bus', w: 3, dur: 8, title: 'Tour buses arrived', text: 'A convoy of tour buses just pulled in.' },
+    { type: 'rain', w: 1.5, dur: 40, title: 'Light rain', text: 'Some people stay home. Arrivals ×0.7.' },
+  ];
+  function rollEvent(s, rnd) {
+    const water = s.rides.some((r, i) => r.lvl && rideDef(i).water);
+    const pool = EVENTS.filter(e => !e.needsWater || water);
+    let x = rnd() * pool.reduce((a, e) => a + e.w, 0);
+    let ev = pool[0];
+    for (const e of pool) { if ((x -= e.w) <= 0) { ev = e; break; } }
+    s.effects.push({ type: ev.type, until: s.time + ev.dur });
+    let busVisitors = 0;
+    if (ev.type === 'bus') {
+      const snap = snapshot(s);
+      busVisitors = Math.min(Math.max(0, snap.g.capacity - s.inPark), Math.max(8, Math.round(snap.lambda * 30)));
+      s.inPark += busVisitors; s.totalVisitors += busVisitors; s.runVisitors += busVisitors;
+    }
+    s.nextEventAt = s.time + 90 + rnd() * 150;
+    return Object.assign({}, ev, { busVisitors });
+  }
+
+  function popBalloon(s, rnd) {
+    const inc = s.rate.rides + s.rate.gate + s.rate.food;
+    if (rnd() < 0.6) {
+      const prize = Math.max(25, inc * 90, s.cash * 0.05);
+      s.cash += prize; s.runEarned += prize; s.lifetimeEarned += prize;
+      return { kind: 'cash', amount: prize };
+    }
+    s.effects.push({ type: 'rush', until: s.time + 30 });
+    return { kind: 'rush' };
+  }
+
+  // ---------- Formatting ----------
+  const SUFFIX = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'UDc', 'DDc', 'TDc', 'QaDc', 'QiDc', 'SxDc', 'SpDc', 'OcDc', 'NoDc', 'Vg'];
+  function fmt(n, digits) {
+    if (!isFinite(n)) return '∞';
+    if (n < 0) return '-' + fmt(-n, digits);
+    if (n < 1000) return n < 10 && digits !== 0 ? (Math.round(n * 10) / 10).toString() : Math.floor(n).toString();
+    const e = Math.floor(Math.log10(n) / 3);
+    if (e < SUFFIX.length) {
+      const v = n / Math.pow(1000, e);
+      return (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2)) + ' ' + SUFFIX[e];
+    }
+    return n.toExponential(2).replace('+', '');
+  }
+  function money(n) { return '$' + fmt(n); }
+  function duration(sec) {
+    sec = Math.max(0, Math.round(sec));
+    if (sec < 60) return sec + ' s';
+    if (sec < 3600) return Math.floor(sec / 60) + ' min ' + (sec % 60 ? (sec % 60) + ' s' : '');
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    return h + ' h' + (m ? ' ' + m + ' min' : '');
+  }
+
+  root.Joyland = {
+    STAY, RIDE_EVERY, MAX_SPEED, PARK_UPGRADES, PERKS, EVENTS,
+    rideDef, milestonesPassed, nextMilestone, newState, migrate, globals, rideStats, snapshot, priceLabel,
+    levelCost, maxLevels, seatCost, speedCost, parkCost, perkCost, seedCash,
+    buyLevels, buySeats, buySpeed, buyPark, buyPerk, tickets, pendingTickets, ticketsTotalFor, sellPark,
+    offlineLimits, step, offline, rollEvent, popBalloon, hasEffect, fmt, money, duration,
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>// Endless Joyland: screen, park map and controls.
+(function () {
+  'use strict';
+  const J = window.Joyland;
+  const SAVE_KEY = 'endless-joyland-v1';
+  const MAX_SPRITES = 150;
+  const rnd = Math.random;
+  const $ = id => document.getElementById(id);
+  const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let S = null;
+  let bulk = 1;
+  let tab = 'rides';
+  let sel = 0;            // selected ride / lot index
+  let lastTick = performance.now();
+  let lastSave = 0;
+
+  // ---------- Saving ----------
+  function loadSave() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (raw) return J.migrate(JSON.parse(raw));
+    } catch (e) { /* storage blocked or corrupt: start fresh */ }
+    return null;
+  }
+  function save() {
+    if (!S) return;
+    S.lastSeen = Date.now();
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
+  }
+  function encodeSave() { return btoa(unescape(encodeURIComponent(JSON.stringify(S)))); }
+  function decodeSave(text) { return J.migrate(JSON.parse(decodeURIComponent(escape(atob(text.trim()))))); }
+
+  // ---------- Toasts and ticker ----------
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    $('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+    while ($('toasts').children.length > 2) $('toasts').firstChild.remove();
+  }
+  const ticker = [];
+  let lastTickerAt = 0;
+  function say(html, force) {
+    const now = performance.now();
+    if (!force && now - lastTickerAt < 1600) return;
+    lastTickerAt = now;
+    ticker.unshift(html);
+    ticker.length = Math.min(ticker.length, window.innerWidth >= 900 ? 3 : 1);
+    $('ticker').innerHTML = ticker.map(t => '<div>' + t + '</div>').join('');
+  }
+  const GROUP_NAMES = {
+    1: ['A solo thrill-seeker', 'A coaster fanatic', 'A curious tourist', 'A teenager skipping chores', 'A local on lunch break'],
+    2: ['A couple', 'Two best friends', 'A parent and kid', 'A pair of grandparents', 'Two coworkers'],
+    3: ['Three friends', 'A small family', 'A trio of cousins'],
+    4: ['A family of four', 'Four roommates', 'A double date'],
+    5: ['A family of five', 'A birthday party', 'A gaggle of teens'],
+    6: ['A school group', 'A scout troop', 'A bachelorette party'],
+  };
+  const pick = arr => arr[Math.floor(rnd() * arr.length)];
+  function favouriteRide(snap) {
+    let x = rnd() * snap.appeal;
+    for (let i = 0; i < snap.stats.length; i++) {
+      const st = snap.stats[i];
+      if (!st) continue;
+      if ((x -= st.fun) <= 0) return J.rideDef(i).name;
+    }
+    return null;
+  }
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---------- Park map ----------
+  const mapEl = $('map');
+  const scroller = $('mapscroll');
+  const canvas = $('park');
+  const ctx = canvas.getContext('2d');
+  let L = null;
+  let sprites = [];
+  let popups = [];
+  const rideAcc = [];
+  let rideAccT = 0;
+  const SHIRTS = ['#ff5d73', '#ffd54a', '#4fb3ff', '#a98bff', '#4fe0a6', '#ff9a3c', '#ff7ccf', '#ffffff', '#7fe3ff'];
+  const BULBS = ['#ffc94a', '#ff4d6d', '#4fb3ff', '#3fd9a2', '#ffffff'];
+  const C = {
+    grass: '#1c4a3b', grass2: '#22584a', grassDark: '#163d31', path: '#4b4566', pathEdge: '#5b5478', ink: '#f7f1e3',
+    muted: '#a9b1d3', gold: '#ffc94a', candy: '#ff4d6d', bad: '#ff5d6c', label: 'rgba(14,18,40,.78)', tree: '#2c7a5c', tree2: '#205e47',
+  };
+
+  function builtCount() { return S.rides.filter(r => r.lvl).length; }
+
+  function layout() {
+    const W = scroller.clientWidth || 360;
+    const viewH = scroller.clientHeight || 400;
+    const cols = Math.max(3, Math.min(5, Math.floor(W / 140)));
+    const pad = 18, gap = 20, top = 40;
+    const plotW = (W - pad * 2 - gap * (cols - 1)) / cols;
+    const plotH = Math.min(plotW * 0.95, 150);
+    const slots = S.rides.length;
+    const rows = Math.max(2, Math.ceil(slots / cols));
+    const gateH = 84;
+    const H = Math.max(viewH, Math.round(top + rows * (plotH + gap) + gateH));
+    const plots = [];
+    for (let i = 0; i < slots; i++) {
+      const r = Math.floor(i / cols), c = i % cols;
+      const x = pad + c * (plotW + gap), y = top + r * (plotH + gap);
+      plots.push({ x, y, w: plotW, h: plotH, cx: x + plotW / 2, cy: y + plotH / 2, qy: y + plotH + gap / 2 });
+    }
+    const vcorr = [pad / 2];
+    for (let c = 1; c < cols; c++) vcorr.push(pad + c * (plotW + gap) - gap / 2);
+    vcorr.push(W - pad / 2);
+    const hcorr = [top - gap / 2];
+    for (let r = 1; r <= rows; r++) hcorr.push(top + r * (plotH + gap) - gap / 2);
+    const bottomY = hcorr[hcorr.length - 1];
+    const gate = { x: W / 2, y: H - 30 };
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      canvas.style.height = H + 'px';
+    }
+    // Decorative trees on the lawn below the rides, placed the same way every time.
+    const trees = [];
+    let seed = 7;
+    const r01 = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let k = 0; k < 14; k++) {
+      const x = r01() * W, y = bottomY + 14 + r01() * Math.max(10, H - bottomY - 40);
+      if (Math.abs(x - W / 2) < 70) continue;
+      trees.push({ x, y, r: 9 + r01() * 9 });
+    }
+    L = { W, H, cols, pad, gap, top, plotW, plotH, rows, plots, vcorr, hcorr, gate, dpr, slots, bottomY, trees, viewH };
+    for (const sp of sprites) { sp.x = Math.min(sp.x, W); sp.y = Math.min(sp.y, H); }
+  }
+
+  function routeTo(sp, tx, ty) {
+    const mid = (sp.x + tx) / 2;
+    let vx = L.vcorr[0];
+    for (const v of L.vcorr) if (Math.abs(v - mid) < Math.abs(vx - mid)) vx = v;
+    vx += (rnd() - 0.5) * 8;
+    sp.path = [[vx, sp.y], [vx, ty], [tx, ty]];
+  }
+  function sendToRide(sp) {
+    const built = [];
+    for (let i = 0; i < S.rides.length; i++) if (S.rides[i].lvl) built.push(i);
+    if (!built.length || !L.plots[built[built.length - 1]]) return leave(sp);
+    const snap = lastSnap;
+    let i = built[0];
+    if (snap && snap.appeal) {
+      let x = rnd() * snap.appeal;
+      for (const b of built) { const f = snap.stats[b] ? snap.stats[b].fun : 0; if ((x -= f) <= 0) { i = b; break; } }
+    }
+    const p = L.plots[i];
+    sp.state = 'walk';
+    sp.speed = 38 + rnd() * 26;
+    routeTo(sp, p.x + 8 + rnd() * (p.w - 16), p.qy + (rnd() - 0.5) * 7);
+  }
+  function leave(sp) {
+    sp.state = 'leave';
+    routeTo(sp, L.gate.x + (rnd() - 0.5) * 20, L.bottomY);
+    sp.path.push([L.gate.x + (rnd() - 0.5) * 16, L.H + 10]);
+  }
+  function spawn(n) {
+    for (let k = 0; k < n; k++) {
+      if (sprites.length >= MAX_SPRITES + 20) return;
+      const sp = { x: L.gate.x + (rnd() - 0.5) * 16, y: L.H + 4, color: pick(SHIRTS), speed: 90 + rnd() * 40, wait: 0, state: 'walk', bob: rnd() * 6, after: 'ride' };
+      sp.path = [[sp.x, L.bottomY + (rnd() - 0.5) * 6]];
+      sprites.push(sp);
+    }
+  }
+  function spriteTarget() { return Math.min(MAX_SPRITES, Math.round(S.inPark)); }
+
+  function updateSprites(dt) {
+    const target = spriteTarget();
+    const active = sprites.filter(s => s.state !== 'leave').length;
+    if (active < target - 3) spawn(Math.min(3, target - active));
+    if (active > target + 2) {
+      let extra = active - target;
+      for (const sp of sprites) { if (extra <= 0) break; if (sp.state === 'queue') { leave(sp); extra--; } }
+    }
+    for (const sp of sprites) {
+      if (sp.path.length) {
+        const [tx, ty] = sp.path[0];
+        const dx = tx - sp.x, dy = ty - sp.y, d = Math.hypot(dx, dy);
+        const stepLen = sp.speed * dt;
+        if (d <= stepLen) { sp.x = tx; sp.y = ty; sp.path.shift(); }
+        else { sp.x += dx / d * stepLen; sp.y += dy / d * stepLen; }
+        if (!sp.path.length) {
+          if (sp.state === 'leave') sp.gone = true;
+          else if (sp.after === 'ride') { sp.after = null; sendToRide(sp); }
+          else { sp.state = 'queue'; sp.wait = 3 + rnd() * 7; }
+        }
+      } else if (sp.state === 'queue') {
+        sp.wait -= dt;
+        if (sp.wait <= 0) { if (rnd() < 0.12) leave(sp); else sendToRide(sp); }
+      }
+    }
+    sprites = sprites.filter(s => !s.gone);
+  }
+
+  function rideHue(i) { return (i * 47 + 350) % 360; }
+  function rideFill(i, l) { return `hsl(${rideHue(i)} 70% ${l || 58}%)`; }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function stringLights(y, x0, x1, phase) {
+    ctx.strokeStyle = 'rgba(255,255,255,.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const span = 46;
+    for (let x = x0; x <= x1; x += 2) {
+      const s = ((x - x0) % span) / span;
+      const yy = y + Math.sin(s * Math.PI) * 5;
+      if (x === x0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+    let k = 0;
+    for (let x = x0 + 6; x < x1; x += 11, k++) {
+      const s = ((x - x0) % span) / span;
+      const yy = y + Math.sin(s * Math.PI) * 5 + 2;
+      const on = reduceMotion || ((k + Math.floor(phase * 2)) % 5 !== 0);
+      ctx.fillStyle = BULBS[k % BULBS.length];
+      ctx.globalAlpha = on ? 0.95 : 0.35;
+      ctx.beginPath(); ctx.arc(x, yy, 1.9, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  let animT = 0;
+  function draw(dt) {
+    if (!L) return;
+    animT += dt;
+    ctx.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
+    const { W, H } = L;
+    // Lawn, then a path network around the lots.
+    ctx.fillStyle = C.grass;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = C.path;
+    for (const y of L.hcorr) ctx.fillRect(0, y - L.gap / 2 + 3, W, L.gap - 6);
+    for (const x of L.vcorr) ctx.fillRect(Math.max(0, x - L.gap / 2 + 3), L.hcorr[0], L.gap - 6, L.bottomY - L.hcorr[0]);
+    ctx.fillRect(L.gate.x - 22, L.bottomY, 44, H - L.bottomY);
+    // Trees on the lower lawn
+    for (const t of L.trees) {
+      ctx.fillStyle = 'rgba(0,0,0,.25)';
+      ctx.beginPath(); ctx.ellipse(t.x + 3, t.y + t.r * 0.7, t.r, t.r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = C.tree2;
+      ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = C.tree;
+      ctx.beginPath(); ctx.arc(t.x - t.r * 0.25, t.y - t.r * 0.25, t.r * 0.62, 0, Math.PI * 2); ctx.fill();
+    }
+    // String lights over the paths
+    for (const y of L.hcorr) stringLights(y - 4, 4, W - 4, animT);
+
+    const snap = lastSnap;
+    const g = snap ? snap.g : null;
+    for (let i = 0; i < L.plots.length; i++) {
+      const p = L.plots[i], r = S.rides[i], def = J.rideDef(i);
+      const isSel = tab === 'rides' && i === sel;
+      if (r && r.lvl) {
+        ctx.fillStyle = C.grass2;
+        roundRect(p.x, p.y, p.w, p.h, 14); ctx.fill();
+        if (isSel) { ctx.save(); ctx.shadowColor = C.gold; ctx.shadowBlur = 16; ctx.strokeStyle = C.gold; ctx.lineWidth = 2.5; roundRect(p.x, p.y, p.w, p.h, 14); ctx.stroke(); ctx.restore(); }
+        const rad = Math.min(p.w, p.h) * 0.31;
+        const cy = p.y + p.h * 0.42;
+        const busy = Math.min(1, r.util || 0);
+        // Glowing ride pad
+        const grd = ctx.createRadialGradient(p.cx, cy - rad * 0.3, rad * 0.2, p.cx, cy, rad);
+        grd.addColorStop(0, rideFill(i, 72));
+        grd.addColorStop(1, rideFill(i, 44));
+        ctx.save();
+        ctx.shadowColor = rideFill(i, 60);
+        ctx.shadowBlur = 8 + busy * 14;
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(p.cx, cy, rad, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        // Bulbs around the pad
+        const nb = 12;
+        for (let k = 0; k < nb; k++) {
+          const a = k / nb * Math.PI * 2 + (reduceMotion ? 0 : animT * (0.3 + busy));
+          ctx.fillStyle = k % 2 ? '#fff6d8' : C.gold;
+          ctx.beginPath(); ctx.arc(p.cx + Math.cos(a) * (rad + 4), cy + Math.sin(a) * (rad + 4), 1.6, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.save();
+        ctx.translate(p.cx, cy);
+        if (!reduceMotion) ctx.rotate(Math.sin(animT * (1.5 + busy * 3) + i) * 0.16 * (0.3 + busy));
+        ctx.font = `${Math.round(rad * 1.1)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(def.icon, 0, 2);
+        ctx.restore();
+        // Name pill
+        ctx.font = '800 11px Figtree, -apple-system, system-ui, sans-serif';
+        const lvTxt = String(r.lvl);
+        const lvW = ctx.measureText(lvTxt).width;
+        const label = fitText(def.name, p.w - 26 - lvW);
+        const nameW = ctx.measureText(label).width;
+        const lw = nameW + lvW + 26;
+        ctx.fillStyle = C.label;
+        roundRect(p.cx - lw / 2, p.y + p.h - 22, lw, 17, 8.5); ctx.fill();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = C.ink;
+        ctx.textAlign = 'left';
+        ctx.fillText(label, p.cx - lw / 2 + 9, p.y + p.h - 13);
+        ctx.fillStyle = C.gold;
+        ctx.fillText(lvTxt, p.cx - lw / 2 + 17 + nameW, p.y + p.h - 13);
+        ctx.textBaseline = 'alphabetic';
+        // Queue meter
+        if (g) {
+          const frac = Math.min(1, (r.wait || 0) / (g.tolerance * 3));
+          if (frac > 0.01) {
+            ctx.fillStyle = (r.wait || 0) > g.tolerance ? C.bad : C.gold;
+            roundRect(p.x + 12, p.y + 5, (p.w - 24) * frac, 4, 2); ctx.fill();
+          }
+        }
+        // Upgrade affordable badge
+        if (S.cash >= J.levelCost(S, i, 1)) {
+          const bx = p.x + p.w - 10, by = p.y + 12;
+          ctx.fillStyle = C.gold;
+          ctx.beginPath(); ctx.arc(bx, by, 8, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#2a1c00';
+          ctx.beginPath(); ctx.moveTo(bx, by - 4.5); ctx.lineTo(bx + 4, by + 1); ctx.lineTo(bx + 1.5, by + 1); ctx.lineTo(bx + 1.5, by + 4.5); ctx.lineTo(bx - 1.5, by + 4.5); ctx.lineTo(bx - 1.5, by + 1); ctx.lineTo(bx - 4, by + 1); ctx.closePath(); ctx.fill();
+        }
+      } else {
+        const cost = J.levelCost(S, i, 1);
+        const can = S.cash >= cost;
+        ctx.fillStyle = 'rgba(0,0,0,.18)';
+        roundRect(p.x, p.y, p.w, p.h, 14); ctx.fill();
+        ctx.setLineDash([6, 5]);
+        ctx.lineWidth = isSel ? 2.5 : 1.5;
+        ctx.strokeStyle = can || isSel ? C.gold : 'rgba(255,255,255,.35)';
+        if (can && !reduceMotion) ctx.lineDashOffset = -animT * 12;
+        roundRect(p.x + 1, p.y + 1, p.w - 2, p.h - 2, 14); ctx.stroke();
+        ctx.setLineDash([]); ctx.lineDashOffset = 0;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = can ? C.gold : 'rgba(255,255,255,.55)';
+        ctx.font = '28px Bungee, Impact, sans-serif';
+        ctx.fillText('+', p.cx, p.cy - 14);
+        ctx.font = '800 11px Figtree, -apple-system, system-ui, sans-serif';
+        ctx.fillText(fitText(def.name, p.w - 10), p.cx, p.cy + 12);
+        ctx.font = '700 11px Figtree, -apple-system, system-ui, sans-serif';
+        ctx.fillText(J.money(cost), p.cx, p.cy + 27);
+        ctx.textBaseline = 'alphabetic';
+      }
+    }
+    // Entrance arch with bulbs
+    const gx = L.gate.x, gy = H - 58;
+    ctx.fillStyle = C.candy;
+    roundRect(gx - 44, gy, 9, 50, 3); ctx.fill();
+    roundRect(gx + 35, gy, 9, 50, 3); ctx.fill();
+    ctx.save(); ctx.shadowColor = C.candy; ctx.shadowBlur = 14;
+    roundRect(gx - 60, gy - 22, 120, 24, 8); ctx.fill(); ctx.restore();
+    for (let k = 0; k < 11; k++) {
+      ctx.fillStyle = (k + Math.floor(animT * 3)) % 2 && !reduceMotion ? '#fff6d8' : C.gold;
+      ctx.beginPath(); ctx.arc(gx - 54 + k * 10.8, gy - 25, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = '12px Bungee, Impact, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('JOYLAND', gx, gy - 10);
+    ctx.textBaseline = 'alphabetic';
+    // Guests
+    for (const sp of sprites) {
+      const bob = reduceMotion ? 0 : Math.sin(animT * 9 + sp.bob) * (sp.path.length ? 0.8 : 0.2);
+      ctx.fillStyle = 'rgba(0,0,0,.35)';
+      ctx.beginPath(); ctx.ellipse(sp.x + 1, sp.y + 3.5, 3.4, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = sp.color;
+      ctx.beginPath(); ctx.arc(sp.x, sp.y + bob, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f3d3b5';
+      ctx.beginPath(); ctx.arc(sp.x, sp.y + bob - 3.4, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    // Money popups
+    ctx.font = '800 12px Figtree, -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    for (const p of popups) {
+      ctx.globalAlpha = Math.max(0, 1 - p.t / 1.4);
+      ctx.fillStyle = C.gold;
+      ctx.fillText(p.text, p.x, p.y - p.t * 24);
+    }
+    ctx.globalAlpha = 1;
+  }
+  const fitCache = new Map();
+  function fitText(t, w) {
+    const key = t + '|' + Math.round(w) + '|' + ctx.font;
+    if (fitCache.has(key)) return fitCache.get(key);
+    let s = t;
+    while (s.length > 3 && ctx.measureText(s).width > w) s = s.slice(0, -2) + '…';
+    if (s !== t && !s.endsWith('…')) s += '…';
+    fitCache.set(key, s);
+    return s;
+  }
+
+  canvas.addEventListener('click', e => {
+    if (!L) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    const i = L.plots.findIndex(p => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h);
+    if (i < 0) return;
+    sel = i;
+    setTab('rides');
+  });
+  function scrollToSel() {
+    if (!L || !L.plots[sel]) return;
+    const p = L.plots[sel];
+    const top = scroller.scrollTop, h = scroller.clientHeight;
+    if (p.y < top + 30 || p.y + p.h > top + h - 50) scroller.scrollTo({ top: Math.max(0, p.cy - h / 2), behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+
+  // ---------- Golden balloon ----------
+  let balloon = null;
+  function spawnBalloon() {
+    const b = document.createElement('button');
+    b.className = 'balloon';
+    b.setAttribute('aria-label', 'Pop the golden balloon for a prize');
+    b.innerHTML = '<svg viewBox="0 0 54 70" aria-hidden="true"><ellipse cx="27" cy="24" rx="20" ry="23" fill="#ffc94a" stroke="#9a6a00" stroke-width="2"/><ellipse cx="20" cy="15" rx="5" ry="7" fill="#fff4cc" opacity=".8"/><path d="M24 47 L30 47 L27 52 Z" fill="#9a6a00"/><path d="M27 52 C 22 58, 32 62, 27 70" stroke="#ffe7a6" stroke-width="1.5" fill="none"/></svg>';
+    const h = mapEl.clientHeight, w = mapEl.clientWidth;
+    balloon = { el: b, x: 20 + rnd() * Math.max(10, w - 90), h, t: 0, life: 13 };
+    b.style.left = balloon.x + 'px'; b.style.top = h + 'px';
+    b.addEventListener('click', () => {
+      const r = J.popBalloon(S, rnd);
+      if (r.kind === 'cash') { toast('Golden balloon! +' + J.money(r.amount)); say('<b>Golden balloon</b> popped: ' + J.money(r.amount) + ' inside', true); }
+      else { toast('Golden balloon! Rush hour: arrivals ×3 for 30 s'); say('<b>Rush hour</b>: arrivals ×3 for 30 s', true); }
+      removeBalloon();
+    });
+    mapEl.appendChild(b);
+  }
+  function removeBalloon() {
+    if (balloon) balloon.el.remove();
+    balloon = null;
+    S.nextBalloonAt = S.time + 60 + rnd() * 100;
+  }
+  function updateBalloon(dt) {
+    if (!balloon) { if (S.time >= S.nextBalloonAt && builtCount() > 0) spawnBalloon(); return; }
+    balloon.t += dt;
+    const p = balloon.t / balloon.life;
+    if (p >= 1) return removeBalloon();
+    const dy = -p * (balloon.h + 80);
+    const dx = reduceMotion ? 0 : Math.sin(balloon.t * 1.3) * 14;
+    balloon.el.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+
+  // ---------- Dock: rides ----------
+  let lastSnap = null;
+  function btn(cls, act) {
+    const b = document.createElement('button');
+    b.className = 'btn ' + cls;
+    b.dataset.act = act;
+    b.innerHTML = '<span class="t"></span><span class="c"></span>';
+    return b;
+  }
+  function setBtn(b, title, cost, can, maxed) {
+    const t = b.firstChild, c = b.lastChild;
+    if (t.textContent !== title) t.textContent = title;
+    if (c.textContent !== cost) c.textContent = cost;
+    b.classList.toggle('off', !can && !maxed);
+    b.classList.toggle('max', !!maxed);
+    b.setAttribute('aria-disabled', can ? 'false' : 'true');
+  }
+  function text(el, v) { if (el.textContent !== v) el.textContent = v; }
+  function html(el, v) { if (el.dataset.h !== v) { el.innerHTML = v; el.dataset.h = v; } }
+
+  const RV = {};
+  (function buildRideView() {
+    const v = $('view-rides');
+    v.innerHTML = `
+      <div class="panel" style="display:grid;gap:9px">
+        <div class="ridehead">
+          <button class="nav" data-nav="-1" aria-label="Previous ride">‹</button>
+          <div class="ricon" data-k="icon"></div>
+          <div style="min-width:0"><div class="rname" data-k="name"></div><div class="rsub" data-k="sub"></div></div>
+          <div class="lvl" data-k="lvl"></div>
+          <button class="nav" data-nav="1" aria-label="Next ride">›</button>
+        </div>
+        <div data-k="builtBox" style="display:grid;gap:9px">
+          <div class="stats">
+            <div class="stat"><div class="lab">Fun</div><div class="v" data-k="fun"></div></div>
+            <div class="stat"><div class="lab">Ticket</div><div class="v" data-k="price"></div></div>
+            <div class="stat"><div class="lab">Riders/min</div><div class="v" data-k="thr"></div></div>
+            <div class="stat"><div class="lab">Queue</div><div class="v" data-k="wait"></div></div>
+          </div>
+          <div class="loadrow"><div class="load"><i data-k="bar"></i></div><div class="note" data-k="ms"></div></div>
+        </div>
+        <div class="lotdesc" data-k="lotBox"></div>
+        <div class="btns" data-k="btns"></div>
+      </div>
+      <div class="footrow">
+        <div class="seg" id="bulk" aria-label="Levels per upgrade"><button aria-pressed="true" data-n="1">×1</button><button aria-pressed="false" data-n="10">×10</button><button aria-pressed="false" data-n="25">×25</button><button aria-pressed="false" data-n="max">Max</button></div>
+        <span class="count" data-k="count"></span>
+      </div>`;
+    v.querySelectorAll('[data-k]').forEach(n => { RV[n.dataset.k] = n; });
+    RV.up = btn('primary', 'level');
+    RV.seat = btn('', 'seat');
+    RV.speed = btn('', 'speed');
+    RV.btns.append(RV.up, RV.seat, RV.speed);
+    v.addEventListener('click', e => {
+      const nav = e.target.closest('[data-nav]');
+      if (nav) { sel = (sel + +nav.dataset.nav + S.rides.length) % S.rides.length; scrollToSel(); refresh(true); return; }
+      const bb = e.target.closest('#bulk button');
+      if (bb) {
+        bulk = bb.dataset.n === 'max' ? 'max' : +bb.dataset.n;
+        for (const x of bb.parentElement.children) x.setAttribute('aria-pressed', x === bb ? 'true' : 'false');
+        refresh(true); return;
+      }
+      const b = e.target.closest('button[data-act]');
+      if (!b) return;
+      const i = sel;
+      let ok = false;
+      const act = b.dataset.act;
+      if (act === 'level' && !S.rides[i].lvl) {
+        ok = J.buyLevels(S, i, 1);
+        if (ok) { toast(J.rideDef(i).name + ' is open!'); say(`<b>${esc(J.rideDef(i).name)}</b> opened its gates`, true); layout(); }
+      } else if (act === 'level') {
+        const before = J.milestonesPassed(S.rides[i].lvl);
+        ok = J.buyLevels(S, i, bulkCount(i));
+        if (ok && J.milestonesPassed(S.rides[i].lvl) > before) toast(`${J.rideDef(i).name} reached Lv ${S.rides[i].lvl}: tickets ×2`);
+      } else if (act === 'seat') ok = J.buySeats(S, i);
+      else if (act === 'speed') ok = J.buySpeed(S, i);
+      if (ok) refresh(true);
+    });
+  })();
+
+  function bulkCount(i) { return bulk === 'max' ? Math.max(1, J.maxLevels(S, i)) : bulk; }
+
+  function renderRides(snap) {
+    if (sel >= S.rides.length) sel = S.rides.length - 1;
+    const i = sel, r = S.rides[i], d = J.rideDef(i), g = snap.g;
+    const built = !!r.lvl;
+    if (RV.icon.dataset.i !== String(i) || RV.icon.dataset.b !== String(built)) {
+      RV.icon.textContent = d.icon;
+      RV.icon.style.background = built ? `radial-gradient(circle at 40% 30%, ${rideFill(i, 72)}, ${rideFill(i, 42)})` : 'var(--night-3)';
+      RV.icon.style.filter = built ? '' : 'grayscale(.7)';
+      RV.icon.dataset.i = i; RV.icon.dataset.b = built;
+    }
+    text(RV.name, d.name);
+    text(RV.count, built ? `Ride ${i + 1} of ${builtCount()}` : 'Lot for sale');
+    RV.builtBox.hidden = !built;
+    RV.lotBox.hidden = built;
+    RV.seat.hidden = !built; RV.speed.hidden = !built;
+    RV.btns.style.gridTemplateColumns = built ? '' : '1fr';
+    if (!built) {
+      text(RV.lvl, '');
+      text(RV.sub, `${d.seats} seats · ${d.cycle} s ride${d.water ? ' · water ride' : ''}`);
+      text(RV.lotBox, `A new ride adds ${J.fmt(d.fun0)} fun, which brings more guests. Tickets start at ${J.money(d.price0 * g.incomeMult)}.`);
+      const cost = J.levelCost(S, i, 1);
+      setBtn(RV.up, i === 0 ? 'Open your first ride' : 'Build ' + d.name, J.money(cost), S.cash >= cost);
+      return;
+    }
+    const st = snap.stats[i];
+    text(RV.lvl, 'Lv ' + r.lvl);
+    text(RV.sub, `${Math.round(d.seats * (1 + 0.5 * r.cap))} seats · ${(d.cycle * Math.pow(0.88, r.spd)).toFixed(1)} s ride${d.water ? ' · water' : ''}`);
+    text(RV.fun, J.fmt(st.fun));
+    text(RV.price, J.money(st.price));
+    text(RV.thr, J.fmt(st.throughput * 60));
+    const wait = r.wait || 0;
+    text(RV.wait, wait < 1 ? 'None' : J.duration(wait));
+    RV.wait.style.color = wait > g.tolerance ? 'var(--bad)' : wait > g.tolerance * 0.6 ? 'var(--warn)' : '';
+    const util = r.util || 0;
+    RV.bar.style.width = Math.min(100, util * 100) + '%';
+    RV.bar.className = util > 1.05 ? (wait > g.tolerance ? 'bad' : 'warn') : '';
+    html(RV.ms, util > 1.05
+      ? `Too busy (${Math.round(util * 100)}% of capacity). Add seats or speed it up.`
+      : `Next milestone <b>Lv ${J.nextMilestone(r.lvl)}</b>: tickets ×2, fun ×1.5`);
+    const n = bulkCount(i);
+    const lc = J.levelCost(S, i, n);
+    setBtn(RV.up, 'Upgrade +' + n, J.money(lc), S.cash >= lc);
+    const sc = J.seatCost(S, i);
+    setBtn(RV.seat, '+ Seats', J.money(sc), S.cash >= sc);
+    const pc = J.speedCost(S, i);
+    const maxed = r.spd >= J.MAX_SPEED;
+    setBtn(RV.speed, maxed ? 'Top speed' : 'Faster', maxed ? 'Maxed' : J.money(pc), S.cash >= pc, maxed);
+  }
+
+  // ---------- Dock: park ----------
+  const SHORT = { land: 'More land', food: 'Snack stands', mascot: 'Mascot parades', crew: 'Crew training', comfort: 'Shade & benches', night: 'Night security' };
+  function upgradeNow(id, s, g) {
+    const l = s.park[id];
+    switch (id) {
+      case 'land': return `Room for ${J.fmt(g.capacity)} guests`;
+      case 'food': return `${J.money(g.foodRate * (lastSnap ? lastSnap.avgPrice : 1) * 60)} per guest a minute`;
+      case 'mascot': return `+${12 * l}% arrivals`;
+      case 'crew': return `+${10 * l}% riders on every ride`;
+      case 'comfort': return `Guests queue ${g.tolerance} s happily`;
+      case 'night': { const o = J.offlineLimits(s); return `${Math.round(o.eff * 100)}% earnings, ${o.hours} h away`; }
+    }
+    return '';
+  }
+  const parkTiles = {};
+  function tileEl(container, id, title, desc, act) {
+    const el = document.createElement('button');
+    el.className = 'tile';
+    el.dataset.act = act;
+    el.dataset.id = id;
+    el.title = desc;
+    el.innerHTML = `<div class="tr"><h3>${esc(title)} <span data-k="lvl"></span></h3><b class="cost" data-k="cost"></b></div><p data-k="now"></p>`;
+    container.appendChild(el);
+    return { el, lvl: el.querySelector('[data-k=lvl]'), now: el.querySelector('[data-k=now]'), cost: el.querySelector('[data-k=cost]') };
+  }
+  function setTile(c, lvl, now, costText, can, maxed) {
+    text(c.lvl, lvl ? String(lvl) : '');
+    text(c.now, now);
+    text(c.cost, maxed ? 'Maxed' : costText);
+    c.el.classList.toggle('can', can && !maxed);
+    c.el.classList.toggle('max', !!maxed);
+  }
+  function renderPark(snap) {
+    for (const u of J.PARK_UPGRADES) {
+      const c = parkTiles[u.id] || (parkTiles[u.id] = tileEl($('parkTiles'), u.id, SHORT[u.id], u.desc, 'park'));
+      const cost = J.parkCost(S, u.id);
+      setTile(c, S.park[u.id], upgradeNow(u.id, S, snap.g), J.money(cost), S.cash >= cost, !isFinite(cost));
+    }
+    text($('priceVal'), J.money(snap.ticketPrice * snap.g.incomeMult));
+    text($('priceLabel'), J.priceLabel(S.priceRatio));
+    text($('priceEffect'), `${Math.round(snap.priceFactor * 100)}% still come in`);
+    if (document.activeElement !== $('priceSlider')) $('priceSlider').value = Math.round(S.priceRatio * 100);
+  }
+  $('parkTiles').addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]');
+    if (!b) return;
+    if (J.buyPark(S, b.dataset.id)) { if (b.dataset.id === 'land') toast('New land! Room for ' + J.fmt(J.globals(S).capacity) + ' guests.'); refresh(true); }
+  });
+  $('priceSlider').addEventListener('input', e => { S.priceRatio = +e.target.value / 100; refresh(true); });
+
+  // ---------- Dock: legacy ----------
+  function perkNow(id) {
+    const l = S.perks[id];
+    switch (id) {
+      case 'seed': return `Start with ${J.money(15 + J.seedCash(l))}`;
+      case 'fame': return `+${25 * l}% arrivals`;
+      case 'thrift': return `Rides ${Math.round((1 - Math.pow(0.95, l)) * 100)}% cheaper`;
+      case 'patience': return `+${20 * l} s queue patience`;
+    }
+    return '';
+  }
+  const perkTiles = {};
+  function renderLegacy() {
+    const have = J.tickets(S), pend = J.pendingTickets(S);
+    text($('tixHave'), J.fmt(have, 0));
+    const nextTotal = J.ticketsTotalFor(S.lifetimeEarned) + 1;
+    const need = Math.max(0, Math.pow(nextTotal, 2) * 1e8 - S.lifetimeEarned);
+    text($('tixInfo'), `+${J.fmt(3 * S.ticketsEarned, 0)}% income, +${J.fmt(S.ticketsEarned, 0)}% guests from ${J.fmt(S.ticketsEarned, 0)} earned. Next ticket in ${J.money(need)}.`);
+    text($('sellC'), '+' + J.fmt(pend, 0) + ' tickets');
+    $('sellBtn').classList.toggle('off', pend < 1);
+    for (const p of J.PERKS) {
+      const c = perkTiles[p.id] || (perkTiles[p.id] = tileEl($('perkTiles'), p.id, p.name, p.desc, 'perk'));
+      const cost = J.perkCost(S, p.id);
+      setTile(c, S.perks[p.id], perkNow(p.id), J.fmt(cost, 0) + ' 🎟', have >= cost, !isFinite(cost));
+      c.el.classList.add('gold');
+    }
+    const badge = $('legacyBadge');
+    badge.hidden = pend < 1;
+    text(badge, '+' + J.fmt(pend, 0));
+  }
+  $('perkTiles').addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]');
+    if (b && J.buyPerk(S, b.dataset.id)) refresh(true);
+  });
+  $('sellBtn').addEventListener('click', () => {
+    const pend = J.pendingTickets(S);
+    if (pend < 1) { toast('Your first golden ticket comes at $100 M total earnings.'); return; }
+    text($('sellGain'), J.fmt(pend, 0) + (pend === 1 ? ' golden ticket' : ' golden tickets'));
+    $('sellConfirm').hidden = false;
+  });
+  $('sellNo').addEventListener('click', () => { $('sellConfirm').hidden = true; });
+  $('sellYes').addEventListener('click', () => {
+    const r = J.sellPark(S);
+    $('sellConfirm').hidden = true;
+    if (!r) return;
+    replaceState(r.state);
+    toast(`Sold for ${J.fmt(r.gain, 0)} golden tickets. Welcome to Park ${S.parkNumber}!`);
+    say(`<b>Park ${S.parkNumber}</b> is an empty lot. Time to build.`, true);
+    setTab('rides');
+  });
+
+  // ---------- Dock: stats ----------
+  function renderStats(snap) {
+    const rows = [
+      ['Open for', J.duration(S.time)],
+      ['Rides open', String(builtCount())],
+      ['Guests here', J.fmt(S.runVisitors, 0)],
+      ['Guests ever', J.fmt(S.totalVisitors, 0)],
+      ['Earned here', J.money(S.runEarned)],
+      ['Earned ever', J.money(S.lifetimeEarned)],
+      ['Rides', J.money(S.rate.rides) + '/s'],
+      ['Gate', J.money(S.rate.gate) + '/s'],
+      ['Food', J.money(S.rate.food) + '/s'],
+      ['Arrivals', J.fmt(S.rate.arrivals * 60) + '/min'],
+      ['Total fun', J.fmt(snap.appeal)],
+      ['Best income', J.money(S.bestIncome) + '/s'],
+    ];
+    html($('statGrid'), rows.map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join(''));
+  }
+  function openModal(id) { $(id).hidden = false; }
+  function closeModal(id) { $(id).hidden = true; }
+  $('saveOpen').addEventListener('click', () => { $('saveText').value = encodeSave(); text($('importMsg'), ''); openModal('saveModal'); });
+  $('saveClose').addEventListener('click', () => closeModal('saveModal'));
+  $('copyBtn').addEventListener('click', () => {
+    const v = $('saveText').value;
+    const fallback = () => { $('saveText').focus(); $('saveText').select(); toast('Select the code and copy it'); };
+    try { navigator.clipboard.writeText(v).then(() => toast('Save code copied'), fallback); } catch (e) { fallback(); }
+  });
+  $('importBtn').addEventListener('click', () => {
+    try {
+      replaceState(decodeSave($('importText').value));
+      $('importText').value = '';
+      closeModal('saveModal');
+      toast('Save loaded');
+    } catch (e) { text($('importMsg'), "That code didn't load. Check that it was copied in full."); }
+  });
+  $('resetOpen').addEventListener('click', () => openModal('resetModal'));
+  $('resetNo').addEventListener('click', () => closeModal('resetModal'));
+  $('resetYes').addEventListener('click', () => {
+    replaceState(J.newState());
+    closeModal('resetModal');
+    setTab('rides');
+    toast('Fresh start. Open your first ride.');
+  });
+  $('helpOpen').addEventListener('click', () => openModal('helpModal'));
+  $('helpClose').addEventListener('click', () => closeModal('helpModal'));
+
+  function replaceState(ns) {
+    S = ns; sel = 0; sprites = []; popups = [];
+    if (balloon) { balloon.el.remove(); balloon = null; }
+    layout(); save(); refresh(true);
+  }
+
+  // ---------- HUD and tabs ----------
+  const EFFECT_LABEL = { sunny: 'Sunny ×1.5', celebrity: 'Celebrity ×2', heat: 'Heat wave: water rides', rush: 'Rush hour ×3', rain: 'Rain ×0.7' };
+  let parkFull = false;
+  function renderHud(snap) {
+    const inc = S.rate.rides + S.rate.gate + S.rate.food;
+    text($('kCash'), J.money(S.cash));
+    text($('kInc'), J.money(inc) + '/s');
+    text($('kVis'), J.fmt(S.inPark, 0));
+    $('kVis').style.color = parkFull ? 'var(--bad)' : '';
+    text($('parkNo'), 'Park ' + S.parkNumber);
+    const sat = S.satisfaction;
+    text($('kMood'), sat > 0.85 ? 'Happy' : sat > 0.5 ? 'Restless' : 'Grumpy');
+    $('kMoodDot').className = 'dot' + (sat > 0.85 ? '' : sat > 0.5 ? ' warn' : ' bad');
+    const chips = [];
+    for (const e of S.effects) if (e.until > S.time && EFFECT_LABEL[e.type]) chips.push(`<span class="chip gold">${EFFECT_LABEL[e.type]} · ${Math.ceil(e.until - S.time)}s</span>`);
+    if (parkFull) chips.push('<span class="chip bad">Park full: buy land</span>');
+    if (S.inPark > MAX_SPRITES) chips.push(`<span class="chip">1 dot ≈ ${J.fmt(S.inPark / MAX_SPRITES, 0)} guests</span>`);
+    html($('chips'), chips.join(''));
+  }
+  function setTab(t) {
+    tab = t;
+    for (const b of document.querySelectorAll('.tab')) b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false');
+    for (const v of ['rides', 'park', 'legacy', 'stats']) $('view-' + v).hidden = v !== t;
+    if (t === 'rides') scrollToSel();
+    refresh(true);
+  }
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+
+  let lastRefresh = 0;
+  function refresh(force) {
+    const now = performance.now();
+    if (!force && now - lastRefresh < 200) return;
+    lastRefresh = now;
+    const snap = lastSnap = J.snapshot(S);
+    renderHud(snap);
+    if (tab === 'rides') renderRides(snap);
+    else if (tab === 'park') renderPark(snap);
+    else if (tab === 'stats') renderStats(snap);
+    renderLegacy();
+    if (L && L.slots !== S.rides.length) layout();
+  }
+
+  // ---------- Game loop ----------
+  let lastFullAt = 0;
+  let arrivalAcc = 0, arrivalAccT = 0;
+  function tick(dt) {
+    const out = J.step(S, dt, rnd);
+    const snapNow = lastSnap || J.snapshot(S);
+    if (snapNow.lambda < 4) {
+      if (out.groups.length) {
+        const n = pick(out.groups);
+        const fav = favouriteRide(snapNow);
+        say(`${pick(GROUP_NAMES[n] || GROUP_NAMES[2])} arrived${fav ? ', off to the <b>' + esc(fav) + '</b>' : ''}`);
+      }
+    } else {
+      arrivalAcc += out.arrivals; arrivalAccT += dt;
+      if (arrivalAccT >= 3) {
+        if (arrivalAcc >= 1) say(`<b>${J.fmt(arrivalAcc, 0)}</b> guests walked in`);
+        arrivalAcc = 0; arrivalAccT = 0;
+      }
+    }
+    if (out.groups.length && L) {
+      const room = spriteTarget() - sprites.filter(s => s.state !== 'leave').length;
+      if (room > 0) spawn(Math.min(room, out.groups.reduce((a, b) => a + b, 0)));
+    }
+    parkFull = out.turnedAway > 0 || S.inPark >= J.globals(S).capacity - 0.5;
+    if (out.turnedAway > 0 && performance.now() - lastFullAt > 15000) {
+      lastFullAt = performance.now();
+      say('<b>Gate closed</b>: the park is full. Buy more land.', true);
+    }
+    if (S.time >= S.nextEventAt && builtCount() > 0) {
+      const ev = J.rollEvent(S, rnd);
+      const extra = ev.type === 'bus' ? ` ${J.fmt(ev.busVisitors, 0)} guests piled out.` : '';
+      toast(ev.title + '!');
+      say(`<b>${esc(ev.title)}</b>. ${esc(ev.text)}${extra}`, true);
+      if (ev.type === 'bus' && L) spawn(Math.min(40, ev.busVisitors));
+    }
+    rideAccT += dt;
+    for (let i = 0; i < out.rideEarned.length; i++) rideAcc[i] = (rideAcc[i] || 0) + (out.rideEarned[i] || 0);
+    if (rideAccT > 1.8 && L) {
+      rideAccT = 0;
+      for (let i = 0; i < rideAcc.length; i++) {
+        const p = L.plots[i];
+        if (rideAcc[i] > 0 && p && popups.length < 30) popups.push({ x: p.cx + (rnd() - 0.5) * p.w * 0.4, y: p.y + p.h * 0.22, text: '+' + J.money(rideAcc[i]), t: 0 });
+        rideAcc[i] = 0;
+      }
+    }
+  }
+
+  function frame(now) {
+    let dt = (now - lastTick) / 1000;
+    lastTick = now;
+    if (dt > 10) {
+      const r = J.offline(S, dt);
+      if (r && dt > 60) showWelcome(r);
+      dt = 0;
+    }
+    dt = Math.min(dt, 1);
+    if (dt > 0) {
+      let left = dt;
+      while (left > 0) { const h = Math.min(0.1, left); tick(h); left -= h; }
+      updateSprites(dt);
+      updateBalloon(dt);
+      for (const p of popups) p.t += dt;
+      popups = popups.filter(p => p.t < 1.4);
+    }
+    refresh(false);
+    draw(dt);
+    if (now - lastSave > 5000) { lastSave = now; save(); }
+    requestAnimationFrame(frame);
+  }
+  setInterval(() => {
+    if (document.hidden) {
+      const now = performance.now();
+      const dt = (now - lastTick) / 1000;
+      if (dt > 0.9) { lastTick = now; let left = Math.min(dt, 60); while (left > 0) { const h = Math.min(0.5, left); tick(h); left -= h; } save(); }
+    }
+  }, 1000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+  window.addEventListener('pagehide', save);
+  if (window.ResizeObserver) new ResizeObserver(() => { if (S) layout(); }).observe(scroller);
+  else window.addEventListener('resize', () => { if (S) layout(); });
+
+  function showWelcome(r) {
+    const capped = r.seconds > r.counted + 1;
+    $('welcomeText').textContent = `You were away for ${J.duration(r.seconds)}. ${J.fmt(r.visitors, 0)} guests came by and your park earned ${J.money(r.earned)}.` +
+      (capped ? ` Offline earnings stop after ${r.hours} h; night security extends that.` : '');
+    openModal('welcome');
+  }
+  $('welcomeOk').addEventListener('click', () => closeModal('welcome'));
+
+  function start(data) {
+    let restored = data && data.state ? J.migrate(data.state) : null;
+    const fromHot = !!restored;
+    if (!restored) restored = loadSave();
+    const fresh = !restored;
+    S = restored || J.newState();
+    layout();
+    if (!fresh && !fromHot) {
+      const away = (Date.now() - (S.lastSeen || Date.now())) / 1000;
+      const r = J.offline(S, away);
+      if (r && away > 60) showWelcome(r);
+    }
+    // Start with the newest ride (or the empty lot) selected.
+    sel = fresh ? 0 : Math.max(0, builtCount() - 1);
+    if (fresh) say('Welcome to your empty lot. Tap <b>Open your first ride</b> to begin.', true);
+    else say(`Welcome back to <b>Park ${S.parkNumber}</b>.`, true);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitCache.clear());
+    refresh(true);
+    lastTick = performance.now();
+    requestAnimationFrame(frame);
+  }
+
+  const hot = window.claude && window.claude.hot;
+  if (hot && typeof hot.snapshot === 'function') { try { hot.snapshot(() => ({ state: S })); } catch (e) { /* optional */ } }
+  if (hot && typeof hot.ready === 'function') hot.ready(start);
+  else start((hot && hot.data) || {});
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+</script>
+</body>
+</html>
