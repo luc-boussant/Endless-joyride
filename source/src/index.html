@@ -73,6 +73,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .mgr.can { border-color: var(--gold); color: var(--gold); }
 .mgr.max { opacity: .6; }
 
+.moodbtn { border: 0; background: none; padding: 0; text-align: left; }
+.moodrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+.moodrow b { font-size: 13px; }
+.moodrow .pct { font-weight: 800; text-align: right; }
+.moodrow .small { grid-column: 1 / -1; }
+
 /* Map */
 .map { position: relative; min-height: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #183d33; }
 .mapscroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
@@ -202,7 +208,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       <div class="kpi cash"><span class="lab">Cash</span><span class="val" id="kCash">$0</span></div>
       <div class="kpi"><span class="lab">Income</span><span class="val" id="kInc">$0/s</span></div>
       <div class="kpi"><span class="lab">Guests</span><span class="val" id="kVis">0</span></div>
-      <div class="kpi"><span class="lab">Mood</span><span class="val mood"><i class="dot" id="kMoodDot"></i><span id="kMood">Happy</span></span></div>
+      <button class="kpi moodbtn" id="moodBtn" aria-label="Show what guests think"><span class="lab">Mood ›</span><span class="val mood"><i class="dot" id="kMoodDot"></i><span id="kMood">Happy</span></span></button>
     </div>
     <button class="goalbar" id="goalbar" aria-label="Show goals">
       <span class="gicon" aria-hidden="true">★</span>
@@ -288,6 +294,14 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     <div id="goalList" style="display:grid;gap:8px"></div>
     <div class="small" id="goalsDone"></div>
     <div class="rowbtns"><button class="plain go" id="goalClose">Close</button></div>
+  </div>
+</div>
+<div class="modal" id="moodModal" hidden>
+  <div class="panel">
+    <h2>Guest mood</h2>
+    <div class="small">Happy guests tell their friends, so more people come. Grumpy guests keep them away.</div>
+    <div id="moodList" style="display:grid;gap:6px"></div>
+    <div class="rowbtns"><button class="plain go" id="moodClose">Close</button></div>
   </div>
 </div>
 <div class="modal" id="resetModal" hidden>

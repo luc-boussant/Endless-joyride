@@ -52,7 +52,7 @@
       cost0: 12 * Math.pow(12, i),
       fun0: Math.pow(2.6, i),
       price0: Math.pow(3, i),
-      thr0: Math.pow(1.7, i),
+      thr0: Math.pow(1.45, i),
     };
     defCache[i] = d;
     return d;
@@ -193,6 +193,7 @@
     return {
       fun: d.fun0 * r.lvl * Math.pow(1.5, m) * (heat ? 3 : 1) * g.decorFun * (r.mgr >= 3 ? 1.5 : 1),
       price: d.price0 * (1 + 0.15 * (r.lvl - 1)) * Math.pow(2, m) * g.incomeMult * (r.mgr >= 1 ? 2 : 1) * (r.mgr >= 3 ? 2 : 1),
+      cycle: d.cycle * Math.pow(0.88, r.spd),
       throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.02 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * g.crewMult * (r.mgr >= 2 ? 1.5 : 1),
     };
   }
@@ -416,7 +417,9 @@
       const money = served * st.price;
       out.rideEarned[i] = money;
       rideMoney += money;
-      const wait = r.queue / st.throughput;
+      // Waiting = loading time for the next cycle, which grows sharply as the ride nears capacity, plus any backlog.
+      const u = Math.min(demand / st.throughput, 0.95);
+      const wait = st.cycle * (0.5 + 0.5 * u / (1 - u)) + r.queue / st.throughput;
       let sat = wait <= g.tolerance ? 1 : Math.max(0, 1 - (wait - g.tolerance) / (2 * g.tolerance));
       if (demand > 0 && balked > 0) sat *= Math.max(0, 1 - balked / (demand * dt));
       r.wait = wait;
@@ -429,8 +432,17 @@
     const leaving = rnd ? Math.min(s.inPark, poisson(s.inPark * dt / STAY, rnd)) : s.inPark * dt / STAY;
     s.inPark = Math.max(0, s.inPark - leaving);
 
-    // Satisfaction drifts toward the current mood of the crowd.
-    const target = satDen ? satNum / satDen : 1;
+    // Mood mixes queues, crowding, entry price, food and decorations; satisfaction drifts toward it.
+    const fill = g.capacity ? s.inPark / g.capacity : 0;
+    const mood = {
+      queues: satDen ? satNum / satDen : 1,
+      crowd: fill <= 0.85 ? 1 : Math.max(0.8, 1 - (fill - 0.85) * 1.4),
+      price: Math.max(0.5, 1 - Math.max(0, s.priceRatio - 0.6) * 0.5),
+      food: s.time < 90 ? 1 : Math.min(1, 0.8 + 0.04 * s.park.food),
+      decor: 1 + Math.min(0.15, 0.01 * s.decor.flowers + 0.03 * s.decor.fountain + 0.02 * s.decor.statue),
+    };
+    s.mood = mood;
+    const target = Math.min(1, mood.queues * mood.crowd * mood.price * mood.food * mood.decor);
     s.satisfaction += (target - s.satisfaction) * Math.min(1, dt / 20);
 
     const earned = gate + rideMoney + food;

@@ -913,14 +913,31 @@
     $('kVis').style.color = parkFull ? 'var(--bad)' : '';
     text($('parkNo'), 'Park ' + S.parkNumber);
     const sat = S.satisfaction;
-    text($('kMood'), sat > 0.85 ? 'Happy' : sat > 0.5 ? 'Restless' : 'Grumpy');
+    text($('kMood'), sat > 0.85 ? 'Happy' : sat > 0.7 ? 'Content' : sat > 0.5 ? 'Restless' : 'Grumpy');
     $('kMoodDot').className = 'dot' + (sat > 0.85 ? '' : sat > 0.5 ? ' warn' : ' bad');
+    if (!$('moodModal').hidden) renderMood();
     const chips = [];
     for (const e of S.effects) if (e.until > S.time && EFFECT_LABEL[e.type]) chips.push(`<span class="chip gold">${EFFECT_LABEL[e.type]} · ${Math.ceil(e.until - S.time)}s</span>`);
     if (parkFull) chips.push('<span class="chip bad">Park full: buy land</span>');
     if (S.inPark > MAX_SPRITES) chips.push(`<span class="chip">1 dot ≈ ${J.fmt(S.inPark / MAX_SPRITES, 0)} guests</span>`);
     html($('chips'), chips.join(''));
   }
+  function renderMood() {
+    const m = S.mood || { queues: 1, crowd: 1, price: 1, food: 1, decor: 1 };
+    const pct = v => Math.round(v * 100) + '%';
+    const col = v => v >= 0.95 ? 'var(--mint)' : v >= 0.8 ? 'var(--warn)' : 'var(--bad)';
+    const rows = [
+      ['Queues', m.queues, m.queues >= 0.95 ? 'Lines are short. Nice.' : 'Some lines are too long. Add seats, speed rides up, or build shade & benches.'],
+      ['Space', m.crowd, m.crowd >= 0.95 ? 'Plenty of room.' : 'The park is packed. Buy more land in the Park tab.'],
+      ['Entry price', m.price, m.price >= 0.95 ? 'Guests think the price is fine.' : 'Guests find the entry ticket too pricey.'],
+      ['Food', m.food, m.food >= 0.95 ? 'Nobody is hungry.' : 'Guests are hungry. Buy snack stands in the Park tab.'],
+    ];
+    const bonus = m.decor > 1 ? `<div class="moodrow"><b>Decorations</b><span class="pct" style="color:var(--mint)">+${Math.round((m.decor - 1) * 100)}%</span><span class="small">Guests love the pretty park.</span></div>` : '';
+    html($('moodList'), rows.map(([n, v, h]) => `<div class="moodrow"><b>${n}</b><span class="pct" style="color:${col(v)}">${pct(v)}</span><span class="small">${h}</span></div>`).join('') + bonus);
+  }
+  $('moodBtn').addEventListener('click', () => { renderMood(); openModal('moodModal'); });
+  $('moodClose').addEventListener('click', () => closeModal('moodModal'));
+
   function setTab(t) {
     tab = t;
     for (const b of document.querySelectorAll('.tab')) b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false');
