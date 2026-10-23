@@ -76,10 +76,9 @@
   const PARK_UPGRADES = [
     { id: 'land', name: 'Buy more land', desc: 'Park capacity ×1.6', base: 250, growth: 3.2 },
     { id: 'food', name: 'Snack stands', desc: 'Visitors spend more on food and drinks between rides', base: 80, growth: 1.6 },
-    { id: 'mascot', name: 'Mascot parades', desc: '+12% visitor arrivals', base: 400, growth: 1.9 },
-    { id: 'crew', name: 'Ride crew training', desc: '+10% throughput on every ride', base: 500, growth: 1.85 },
-    { id: 'comfort', name: 'Shade, benches & restrooms', desc: 'Visitors tolerate +15 s more queueing', base: 300, growth: 2.1, max: 20 },
-    { id: 'night', name: 'Night security', desc: '+1 h offline time and +2% offline earnings', base: 2000, growth: 3, max: 22 },
+    { id: 'gardens', name: 'Gardens & fountains', desc: '+6% fun on every ride', base: 150, growth: 1.7 },
+    { id: 'comfort', name: 'Shade & lamps', desc: 'Visitors queue 15 s longer happily', base: 300, growth: 2.1, max: 20 },
+    { id: 'mascot', name: 'Mascots & statues', desc: '+12% visitor arrivals', base: 400, growth: 1.9 },
     { id: 'mech', name: 'Mechanics', desc: 'Rides break down less and get fixed faster', base: 350, growth: 2.3, max: 20 },
     { id: 'crews', name: 'Construction crews', desc: 'Build one more thing at the same time', base: 5e4, growth: 100, max: 3 },
   ];
@@ -103,13 +102,11 @@
   ];
 
   // ---------- Decorations ----------
-  const DECOR = [
-    { id: 'flowers', name: 'Flower beds', desc: '+3% fun on every ride', base: 150, growth: 1.6 },
-    { id: 'lamps', name: 'Lamp posts', desc: 'Guests queue 5 s longer happily', base: 800, growth: 1.9 },
-    { id: 'fountain', name: 'Fountains', desc: '+8% fun on every ride', base: 6000, growth: 2.3 },
-    { id: 'statue', name: 'Mascot statues', desc: '+10% guest arrivals', base: 1.2e5, growth: 3 },
-  ];
-  const DEC = Object.fromEntries(DECOR.map(d => [d.id, d]));
+  // What the map shows, derived from the park upgrades that pay for it.
+  function decorView(s) {
+    const p = s.park;
+    return { flowers: Math.min(40, p.gardens * 2), fountain: Math.min(6, Math.floor(p.gardens / 3)), lamps: p.comfort, statue: Math.min(6, Math.floor(p.mascot / 3)) };
+  }
 
   function newRide() { return { lvl: 0, cap: 0, spd: 0, queue: 0, mgr: 0, broken: 0 }; }
 
@@ -119,7 +116,7 @@
       cash: 15,
       time: 0,
       rides: [newRide()],
-      park: { land: 0, food: 0, mascot: 0, crew: 0, comfort: 0, night: 0, mech: 0, crews: 0 },
+      park: { land: 0, food: 0, gardens: 0, comfort: 0, mascot: 0, mech: 0, crews: 0 },
       builds: [],          // {kind, i, start, end} in wall-clock ms
       priceRatio: 0.5,
       inPark: 0,
@@ -129,7 +126,6 @@
       ticketsEarned: 0,     // tickets ever earned from selling parks
       ticketsSpent: 0,
       perks: { seed: 0, fame: 0, thrift: 0, patience: 0, builder: 0 },
-      decor: { flowers: 0, lamps: 0, fountain: 0, statue: 0 },
       goals: [],
       goalsDone: 0,
       parkNumber: 1,
@@ -162,7 +158,9 @@
     s.park = Object.assign(newState().park, raw.park || {});
     s.perks = Object.assign(newState().perks, raw.perks || {});
     s.rate = Object.assign(newState().rate, raw.rate || {});
-    s.decor = Object.assign(newState().decor, raw.decor || {});
+    if (raw.decor && !(raw.park && raw.park.gardens !== undefined)) s.park.gardens = (raw.decor.flowers || 0) + (raw.decor.fountain || 0);
+    for (const k of Object.keys(s.park)) if (!(k in newState().park)) delete s.park[k];
+    delete s.decor;
     if (!Array.isArray(s.goals)) s.goals = [];
     if (!Array.isArray(s.builds)) s.builds = [];
     if (!Array.isArray(s.rides) || !s.rides.length) s.rides = [newRide()];
@@ -180,10 +178,9 @@
     const t = s.ticketsEarned; // every ticket ever earned counts, spent or not
     return {
       incomeMult: (1 + 0.03 * t) * (hasEffect(s, 'boost') ? 2 : 1),
-      arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t) * (1 + 0.1 * s.decor.statue),
-      decorFun: 1 + 0.03 * s.decor.flowers + 0.08 * s.decor.fountain,
-      crewMult: 1 + 0.1 * s.park.crew,
-      tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience + 5 * s.decor.lamps,
+      arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t),
+      decorFun: 1 + 0.06 * s.park.gardens,
+      tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience,
       capacity: Math.floor(60 * Math.pow(1.6, s.park.land)),
       foodRate: 0.04 * (1 - Math.pow(0.93, s.park.food)),
       costMult: Math.pow(0.95, s.perks.thrift),
@@ -205,7 +202,7 @@
       price: d.price0 * (1 + 0.15 * (r.lvl - 1)) * Math.pow(2, m) * g.incomeMult * (r.mgr >= 1 ? 2 : 1) * (r.mgr >= 3 ? 2 : 1),
       cycle: d.cycle * Math.pow(0.88, r.spd),
       broken: r.broken > 0,
-      throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.02 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * g.crewMult * (r.mgr >= 2 ? 1.5 : 1),
+      throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.08 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * (r.mgr >= 2 ? 1.5 : 1),
     };
   }
 
@@ -258,7 +255,6 @@
     const r = s.rides[i];
     return r.mgr >= MANAGERS.length ? Infinity : rideDef(i).cost0 * MANAGERS[r.mgr].cost * globals(s).costMult;
   }
-  function decorCost(s, id) { return DEC[id].base * Math.pow(DEC[id].growth, s.decor[id]); }
   function parkCost(s, id) {
     const u = UPG[id], l = s.park[id];
     return u.max !== undefined && l >= u.max ? Infinity : u.base * Math.pow(u.growth, l);
@@ -320,7 +316,6 @@
   function buySpeed(s, i) { return s.rides[i].spd < MAX_SPEED && startBuild(s, 'speed', i, speedCost(s, i)); }
   function repair(s, i) { const r = s.rides[i]; if (!(r.broken > 0)) return false; r.broken = 0; return true; }
   function buyManager(s, i) { if (!s.rides[i].lvl || !spend(s, managerCost(s, i))) return false; s.rides[i].mgr++; return true; }
-  function buyDecor(s, id) { if (!spend(s, decorCost(s, id))) return false; s.decor[id]++; return true; }
   function buyPark(s, id) {
     if (id === 'land') return startBuild(s, 'land', undefined, parkCost(s, id));
     if (!spend(s, parkCost(s, id))) return false; s.park[id]++; return true;
@@ -351,8 +346,8 @@
     if (built.length) add(2, { type: 'guests', target: nice(Math.max(15, s.inPark * 1.5)) });
     add(2, { type: 'earn', target: nice(Math.max(200, s.runEarned * 2.5)) });
     if (built.length) add(1, { type: 'land', target: s.park.land + 1 });
-    const d = DECOR[Math.floor(rnd() * DECOR.length)];
-    if (s.runEarned > d.base * 3) add(1, { type: 'decor', id: d.id, target: s.decor[d.id] + 1 });
+    const u = ['food', 'gardens', 'comfort', 'mascot'][Math.floor(rnd() * 4)];
+    if (s.runEarned > UPG[u].base * 3) add(1, { type: 'upgrade', id: u, target: s.park[u] + 1 });
     const mi = built.find(i => s.rides[i].mgr < MANAGERS.length && s.runEarned > managerCost(s, i) * 0.3);
     if (mi !== undefined) add(1.5, { type: 'manager', i: mi, target: s.rides[mi].mgr + 1 });
     if (!opts.length) return { type: 'earn', target: nice(Math.max(200, s.runEarned * 4)) };
@@ -369,7 +364,8 @@
       case 'guests': return { label: `Have ${fmt(g.target)} guests in the park`, value: s.inPark, target: g.target };
       case 'earn': return { label: `Earn ${money(g.target)} in this park`, value: s.runEarned, target: g.target };
       case 'land': return { label: 'Buy more land', value: s.park.land, target: g.target };
-      case 'decor': return { label: 'Add ' + DEC[g.id].name.toLowerCase().replace(/s$/, ''), value: s.decor[g.id], target: g.target };
+      case 'upgrade': return { label: `${UPG[g.id] ? UPG[g.id].name : 'Park upgrade'} to level ${g.target}`, value: UPG[g.id] ? s.park[g.id] : g.target, target: g.target };
+      case 'decor': return { label: 'Old goal', value: 1, target: 1 };
       case 'manager': return { label: `Hire a ${MANAGERS[g.target - 1].name.toLowerCase()} for the ${name}`, value: r ? r.mgr : 0, target: g.target };
     }
     return { label: '', value: 1, target: 1 };
@@ -405,7 +401,7 @@
   }
 
   function offlineLimits(s) {
-    return { hours: 4 + s.park.night, eff: 0.5 + 0.02 * s.park.night };
+    return { hours: 12, eff: 0.5 };
   }
 
   // ---------- Simulation ----------
@@ -504,7 +500,7 @@
       crowd: fill <= 0.85 ? 1 : Math.max(0.8, 1 - (fill - 0.85) * 1.4),
       price: Math.max(0.5, 1 - Math.max(0, s.priceRatio - 0.6) * 0.5),
       food: s.time < 90 ? 1 : Math.min(1, 0.8 + 0.04 * s.park.food),
-      decor: 1 + Math.min(0.15, 0.01 * s.decor.flowers + 0.03 * s.decor.fountain + 0.02 * s.decor.statue),
+      decor: 1 + Math.min(0.15, 0.015 * s.park.gardens),
     };
     s.mood = mood;
     const target = Math.min(1, mood.queues * mood.crowd * mood.price * mood.food * mood.decor);
@@ -614,15 +610,15 @@
   function duration(sec) {
     sec = Math.max(0, Math.round(sec));
     if (sec < 60) return sec + ' s';
-    if (sec < 3600) return Math.floor(sec / 60) + ' min ' + (sec % 60 ? (sec % 60) + ' s' : '');
+    if (sec < 3600) return Math.floor(sec / 60) + ' min' + (sec % 60 ? ' ' + (sec % 60) + ' s' : '');
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
     return h + ' h' + (m ? ' ' + m + ' min' : '');
   }
 
   root.Joyland = {
-    STAY, RIDE_EVERY, MAX_SPEED, TICKET_SCALE, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, DECOR,
+    STAY, RIDE_EVERY, MAX_SPEED, TICKET_SCALE, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, decorView,
     setClock: f => { clock = f; }, now: () => clock(), buildTime, buildFor, busyCrews, canBuild, processBuilds, rushBuilds, repair,
-    managerCost, decorCost, buyManager, buyDecor, checkGoals, goalInfo,
+    managerCost, buyManager, checkGoals, goalInfo,
     rideDef, milestonesPassed, nextMilestone, newState, migrate, globals, rideStats, snapshot, priceLabel,
     levelCost, maxLevels, seatCost, speedCost, parkCost, perkCost, seedCash,
     buyLevels, buySeats, buySpeed, buyPark, buyPerk, tickets, pendingTickets, ticketsTotalFor, sellPark,

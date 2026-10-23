@@ -9,8 +9,7 @@
   const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let S = null;
-  let bulk = 1;
-  let tab = 'rides';
+  let tab = '';           // open sheet: 'rides', 'park', 'legacy', or '' when closed
   let sel = 0;            // selected ride / lot index
   let lastTick = performance.now();
   let lastSave = 0;
@@ -83,6 +82,9 @@
       def: i => J.rideDef(i),
       hue: i => rideHue(i),
       onSelect: i => { sel = i; setTab('rides'); },
+      onBackground: () => { if (sheetOpen) closeSheet(); },
+      decor: s => J.decorView(s),
+      sheetOpen: () => sheetOpen && window.innerWidth < 900,
     });
   } catch (e) { P3 = null; }
   if (P3) mapEl.classList.add('three');
@@ -260,7 +262,7 @@
   }
 
   function drawDecor() {
-    const d = S.decor;
+    const d = J.decorView(S);
     // Lamp posts at path crossings
     const nl = Math.min(d.lamps, L.lampSpots.length);
     for (let k = 0; k < nl; k++) {
@@ -320,7 +322,7 @@
     if (S.park.food === 0 && S.time > 120) problems.push("I'm hungry!", 'Where are the snacks?');
     if (problems.length && rnd() < 0.75) return { text: pick(problems), bad: true };
     const happy = [`Best ${name} ever!`, 'Wheee!', 'Again! Again!', 'I love this park!', `The ${name} rocks!`, 'What a view!'];
-    if (S.decor.fountain || S.decor.flowers) happy.push('Such a pretty park!');
+    if (S.park.gardens) happy.push('Such a pretty park!');
     if (r && r.mgr) happy.push('The staff here are great!');
     return { text: pick(happy), bad: false };
   }
@@ -666,7 +668,7 @@
   let lastSnap = null;
   function btn(cls, act) {
     const b = document.createElement('button');
-    b.className = 'btn ' + cls;
+    b.className = ('btn ' + cls).trim();
     b.dataset.act = act;
     b.innerHTML = '<span class="t"></span><span class="c"></span>';
     return b;
@@ -686,45 +688,27 @@
   (function buildRideView() {
     const v = $('view-rides');
     v.innerHTML = `
-      <div class="panel" style="display:grid;gap:9px">
-        <div class="ridehead">
-          <button class="nav" data-nav="-1" aria-label="Previous ride">‹</button>
-          <div class="ricon" data-k="icon"></div>
-          <div style="min-width:0"><div class="rname" data-k="name"></div><div class="rsub" data-k="sub"></div></div>
-          <div class="lvl" data-k="lvl"></div>
-          <button class="nav" data-nav="1" aria-label="Next ride">›</button>
-        </div>
-        <div data-k="builtBox" style="display:grid;gap:9px">
-          <div class="stats">
-            <div class="stat"><div class="lab">Fun</div><div class="v" data-k="fun"></div></div>
-            <div class="stat"><div class="lab">Ticket</div><div class="v" data-k="price"></div></div>
-            <div class="stat"><div class="lab">Riders/min</div><div class="v" data-k="thr"></div></div>
-            <div class="stat"><div class="lab">Queue</div><div class="v" data-k="wait"></div></div>
-          </div>
-          <div class="loadrow"><div class="load"><i data-k="bar"></i></div><div class="note" data-k="ms"></div></div>
-        </div>
-        <div class="lotdesc" data-k="lotBox"></div>
-        <div class="btns" data-k="btns"></div>
+      <div class="ridehead">
+        <button class="nav" data-nav="-1" aria-label="Previous ride">‹</button>
+        <div class="ricon" data-k="icon"></div>
+        <div style="min-width:0"><div class="rname" data-k="name"></div><div class="rsub" data-k="sub"></div></div>
+        <div class="lvl" data-k="lvl"></div>
+        <button class="nav" data-nav="1" aria-label="Next ride">›</button>
       </div>
-      <div class="footrow">
-        <div class="seg" id="bulk" aria-label="Levels per upgrade"><button aria-pressed="true" data-n="1">×1</button><button aria-pressed="false" data-n="10">×10</button><button aria-pressed="false" data-n="25">×25</button><button aria-pressed="false" data-n="max">Max</button></div>
-        <button class="mgr" data-act="mgr" data-k="mgr"></button>
-      </div>`;
+      <div class="statline" data-k="line"></div>
+      <div class="lotdesc" data-k="lotBox"></div>
+      <div class="btns" data-k="btns"></div>`;
     v.querySelectorAll('[data-k]').forEach(n => { RV[n.dataset.k] = n; });
-    RV.up = btn('primary', 'level');
+    RV.fix = btn('danger full', 'fix');
+    RV.up = btn('primary half', 'level');
+    RV.max = btn('half', 'max');
     RV.seat = btn('', 'seat');
     RV.speed = btn('', 'speed');
-    RV.fix = btn('danger', 'fix');
-    RV.btns.append(RV.fix, RV.up, RV.seat, RV.speed);
+    RV.mgr = btn('', 'mgr');
+    RV.btns.append(RV.fix, RV.up, RV.max, RV.seat, RV.speed, RV.mgr);
     v.addEventListener('click', e => {
       const nav = e.target.closest('[data-nav]');
       if (nav) { sel = (sel + +nav.dataset.nav + S.rides.length) % S.rides.length; scrollToSel(); refresh(true); return; }
-      const bb = e.target.closest('#bulk button');
-      if (bb) {
-        bulk = bb.dataset.n === 'max' ? 'max' : +bb.dataset.n;
-        for (const x of bb.parentElement.children) x.setAttribute('aria-pressed', x === bb ? 'true' : 'false');
-        refresh(true); return;
-      }
       const b = e.target.closest('button[data-act]');
       if (!b) return;
       const i = sel;
@@ -733,28 +717,25 @@
       if (act === 'level' && !S.rides[i].lvl) {
         ok = J.buyLevels(S, i, 1);
         if (ok) { toast(`Construction started: ${J.rideDef(i).name} opens in ${J.duration(J.buildTime(S, 'ride', i) || 0)}`); say(`Builders are on the <b>${esc(J.rideDef(i).name)}</b>`, true); }
-        else if (!J.canBuild(S)) toast('All construction crews are busy. Hire more in the Park tab.');
+        else if (!J.canBuild(S)) toast('All construction crews are busy. Hire more in Park.');
       } else if (act === 'fix') {
         ok = J.repair(S, i);
         if (ok) { toast(`${J.rideDef(i).name} fixed!`); say(`Mechanics fixed the <b>${esc(J.rideDef(i).name)}</b>`, true); }
-      } else if (act === 'level') {
+      } else if (act === 'level' || act === 'max') {
         const before = J.milestonesPassed(S.rides[i].lvl);
-        ok = J.buyLevels(S, i, bulkCount(i));
+        ok = J.buyLevels(S, i, act === 'max' ? Math.max(1, J.maxLevels(S, i)) : 1);
         if (ok && J.milestonesPassed(S.rides[i].lvl) > before) toast(`${J.rideDef(i).name} reached Lv ${S.rides[i].lvl}: tickets ×2`);
       } else if (act === 'seat' || act === 'speed') {
         ok = act === 'seat' ? J.buySeats(S, i) : J.buySpeed(S, i);
         if (ok) toast(`Work started on the ${J.rideDef(i).name}: ${act === 'seat' ? 'more seats' : 'faster ride'}`);
-        else if (!J.canBuild(S) && !buildOf(i, act === 'seat' ? 'seats' : 'speed')) toast('All construction crews are busy. Hire more in the Park tab.');
-      }
-      else if (act === 'mgr') {
+        else if (!J.canBuild(S) && !buildOf(i, act === 'seat' ? 'seats' : 'speed')) toast('All construction crews are busy. Hire more in Park.');
+      } else if (act === 'mgr') {
         ok = J.buyManager(S, i);
         if (ok) toast(`${J.MANAGERS[S.rides[i].mgr - 1].name} hired for the ${J.rideDef(i).name}: ${J.MANAGERS[S.rides[i].mgr - 1].desc}`);
       }
       if (ok) refresh(true);
     });
   })();
-
-  function bulkCount(i) { return bulk === 'max' ? Math.max(1, J.maxLevels(S, i)) : bulk; }
 
   function renderRides(snap) {
     if (sel >= S.rides.length) sel = S.rides.length - 1;
@@ -767,20 +748,12 @@
       RV.icon.dataset.i = i; RV.icon.dataset.b = built;
     }
     text(RV.name, d.name);
-    RV.mgr.hidden = !built;
-    if (built) {
-      const mc = J.managerCost(S, i);
-      const t = J.MANAGERS[r.mgr];
-      html(RV.mgr, t ? `Hire ${t.name.toLowerCase()}<small>${t.desc} · ${J.money(mc)}</small>` : `${'★'.repeat(r.mgr)} Showrunner<small>Fully staffed</small>`);
-      RV.mgr.classList.toggle('can', !!t && S.cash >= mc);
-      RV.mgr.classList.toggle('max', !t);
-    }
-    RV.builtBox.hidden = !built;
-    RV.lotBox.hidden = built;
-    RV.seat.hidden = !built; RV.speed.hidden = !built;
     const broken = built && r.broken > 0;
     RV.fix.hidden = !broken;
-    RV.btns.style.gridTemplateColumns = built ? '' : '1fr';
+    for (const k of ['max', 'seat', 'speed', 'mgr']) RV[k].hidden = !built;
+    RV.up.classList.toggle('full', !built);
+    RV.line.hidden = !built;
+    RV.lotBox.hidden = built;
     const crewsFree = J.canBuild(S);
     if (!built) {
       text(RV.lvl, '');
@@ -793,49 +766,46 @@
         setBtn(RV.up, 'Building…', J.duration(left) + ' left', false);
         return;
       }
-      text(RV.lotBox, `Adds ${J.fmt(d.fun0)} fun, which brings more guests. Tickets start at ${J.money(d.price0 * g.incomeMult)}. Construction takes ${J.duration(J.buildTime(S, 'ride', i))}.`);
+      text(RV.lotBox, `Brings ${J.fmt(d.fun0)} fun and more guests. Building takes ${J.duration(J.buildTime(S, 'ride', i))}.`);
       setBtn(RV.up, crewsFree ? (i === 0 ? 'Build your first ride' : 'Build ' + d.name) : 'All crews busy', J.money(cost), S.cash >= cost && crewsFree);
       return;
     }
     const st = snap.stats[i];
     if (broken) setBtn(RV.fix, '⚠ Broken down: repair now', `Fixes itself in ${J.duration(r.broken)}`, true);
     text(RV.lvl, 'Lv ' + r.lvl);
-    text(RV.sub, `${Math.round(d.seats * (1 + 0.5 * r.cap))} seats · ${(d.cycle * Math.pow(0.88, r.spd)).toFixed(1)} s ride${d.water ? ' · water' : ''}`);
-    text(RV.fun, J.fmt(st.fun));
-    text(RV.price, J.money(st.price));
-    text(RV.thr, J.fmt(st.throughput * 60));
-    const wait = r.wait || 0;
-    text(RV.wait, wait < 1 ? 'None' : J.duration(wait));
-    RV.wait.style.color = wait > g.tolerance ? 'var(--bad)' : wait > g.tolerance * 0.6 ? 'var(--warn)' : '';
-    const util = r.util || 0;
-    RV.bar.style.width = Math.min(100, util * 100) + '%';
-    RV.bar.className = util > 1.05 ? (wait > g.tolerance ? 'bad' : 'warn') : '';
-    html(RV.ms, broken ? 'Broken down. Guests in line are leaving.' : util > 1.05
-      ? `Too busy (${Math.round(util * 100)}% of capacity). Add seats or speed it up.`
-      : `Next milestone <b>Lv ${J.nextMilestone(r.lvl)}</b>: tickets ×2, fun ×1.5`);
-    const n = bulkCount(i);
-    const lc = J.levelCost(S, i, n);
-    setBtn(RV.up, 'Upgrade +' + n, J.money(lc), S.cash >= lc);
+    text(RV.sub, `${Math.round(d.seats * (1 + 0.5 * r.cap))} seats · ${(d.cycle * Math.pow(0.88, r.spd)).toFixed(1)} s ride`);
+    const wait = r.wait || 0, util = r.util || 0;
+    const warn = broken ? '<span class="bad">Guests in line are leaving</span>'
+      : wait > g.tolerance ? '<span class="bad">Line too long: add seats or speed</span>'
+      : util > 1.05 ? '<span class="warn">Very busy</span>' : '';
+    html(RV.line, `<span>Fun <b>${J.fmt(st.fun)}</b></span><span><b>${J.money(st.price)}</b> a ride</span><span>Queue <b>${wait < 1 ? 'none' : J.duration(wait)}</b></span>${warn}`);
+    const lc = J.levelCost(S, i, 1);
+    setBtn(RV.up, 'Upgrade +1', J.money(lc), S.cash >= lc);
+    const n = Math.max(1, J.maxLevels(S, i)), mc = J.levelCost(S, i, n);
+    setBtn(RV.max, n > 1 ? `Upgrade +${n}` : 'Upgrade max', J.money(mc), S.cash >= mc);
     const sc = J.seatCost(S, i), sb = buildOf(i, 'seats');
-    if (sb) setBtn(RV.seat, 'Adding seats', J.duration(timeLeft(sb)) + ' left', false);
-    else setBtn(RV.seat, '+ Seats · ' + J.duration(J.buildTime(S, 'seats', i)), crewsFree ? J.money(sc) : 'Crews busy', S.cash >= sc && crewsFree);
+    if (sb) setBtn(RV.seat, 'Seats', J.duration(timeLeft(sb)) + ' left', false);
+    else setBtn(RV.seat, '+ Seats', crewsFree ? J.money(sc) : 'Crews busy', S.cash >= sc && crewsFree);
     const pc = J.speedCost(S, i), pb = buildOf(i, 'speed');
     const maxed = r.spd >= J.MAX_SPEED;
-    if (pb) setBtn(RV.speed, 'Tuning up', J.duration(timeLeft(pb)) + ' left', false);
-    else setBtn(RV.speed, maxed ? 'Top speed' : 'Faster · ' + J.duration(J.buildTime(S, 'speed', i)), maxed ? 'Maxed' : crewsFree ? J.money(pc) : 'Crews busy', S.cash >= pc && crewsFree, maxed);
+    if (pb) setBtn(RV.speed, 'Speed', J.duration(timeLeft(pb)) + ' left', false);
+    else setBtn(RV.speed, maxed ? 'Top speed' : 'Faster', maxed ? 'Maxed' : crewsFree ? J.money(pc) : 'Crews busy', S.cash >= pc && crewsFree, maxed);
+    const t = J.MANAGERS[r.mgr], mgc = J.managerCost(S, i);
+    if (t) setBtn(RV.mgr, 'Hire ' + t.name.toLowerCase(), J.money(mgc), S.cash >= mgc);
+    else setBtn(RV.mgr, '★★★ Staff', 'Fully staffed', false, true);
+    RV.mgr.title = t ? t.desc : '';
   }
 
   // ---------- Dock: park ----------
-  const SHORT = { land: 'More land', food: 'Snack stands', mascot: 'Mascot parades', crew: 'Crew training', comfort: 'Shade & benches', night: 'Night security', mech: 'Mechanics', crews: 'Builder crews' };
+  const SHORT = { land: 'More land', food: 'Snack stands', gardens: 'Gardens & fountains', comfort: 'Shade & lamps', mascot: 'Mascots & statues', mech: 'Mechanics', crews: 'Builder crews' };
   function upgradeNow(id, s, g) {
     const l = s.park[id];
     switch (id) {
       case 'land': return `Room for ${J.fmt(g.capacity)} guests`;
       case 'food': return `${J.money(g.foodRate * (lastSnap ? lastSnap.avgPrice : 1) * 60)} per guest a minute`;
       case 'mascot': return `+${12 * l}% arrivals`;
-      case 'crew': return `+${10 * l}% riders on every ride`;
+      case 'gardens': return `+${6 * l}% fun on every ride`;
       case 'comfort': return `Guests queue ${g.tolerance} s happily`;
-      case 'night': { const o = J.offlineLimits(s); return `${Math.round(o.eff * 100)}% earnings, ${o.hours} h away`; }
       case 'mech': return `A ride breaks ~every ${J.duration(g.mtbf)}, fixed in ${J.duration(g.repair)}`;
       case 'crews': return `${g.crews} crew${g.crews > 1 ? 's' : ''}: ${g.crews} build${g.crews > 1 ? 's' : ''} at once`;
     }
@@ -898,29 +868,6 @@
     return '';
   }
   const perkTiles = {};
-  const decorTiles = {};
-  function decorNow(id) {
-    const n = S.decor[id];
-    switch (id) {
-      case 'flowers': return `${n} placed · +${3 * n}% fun`;
-      case 'lamps': return `${n} placed · +${5 * n} s patience`;
-      case 'fountain': return `${n} placed · +${8 * n}% fun`;
-      case 'statue': return `${n} placed · +${10 * n}% guests`;
-    }
-    return '';
-  }
-  function renderDecor() {
-    for (const d of J.DECOR) {
-      const c = decorTiles[d.id] || (decorTiles[d.id] = tileEl($('decorTiles'), d.id, d.name, d.desc, 'decor'));
-      const cost = J.decorCost(S, d.id);
-      setTile(c, 0, decorNow(d.id), J.money(cost), S.cash >= cost, false);
-    }
-  }
-  $('decorTiles').addEventListener('click', e => {
-    const b = e.target.closest('button[data-act]');
-    if (b && J.buyDecor(S, b.dataset.id)) refresh(true);
-  });
-
   function goalRows() {
     return S.goals.map(g => {
       const info = J.goalInfo(S, g);
@@ -931,9 +878,8 @@
     const rows = goalRows();
     if (!rows.length) return;
     const top = rows.reduce((a, b) => (b.frac > a.frac ? b : a));
-    text($('gLabel'), top.info.label);
-    $('gBar').style.width = Math.round(top.frac * 100) + '%';
-    text($('gCount'), `${S.goalsDone} done`);
+    $('goalbar').style.setProperty('--p', top.frac.toFixed(3));
+    $('goalbar').setAttribute('aria-label', 'Goals: ' + top.info.label);
     if (!$('goalModal').hidden) {
       html($('goalList'), rows.map(r => `<div class="goalrow"><div class="gl"><span>${esc(r.info.label)}</span><span>${Math.floor(r.frac * 100)}%</span></div><div class="gprog"><i style="width:${Math.round(r.frac * 100)}%"></i></div></div>`).join(''));
       const left = 5 - (S.goalsDone % 5);
@@ -1056,14 +1002,18 @@
     $('kVis').style.color = parkFull ? 'var(--bad)' : '';
     text($('parkNo'), 'Park ' + S.parkNumber);
     const sat = S.satisfaction;
-    text($('kMood'), sat > 0.85 ? 'Happy' : sat > 0.7 ? 'Content' : sat > 0.5 ? 'Restless' : 'Grumpy');
-    $('kMoodDot').className = 'dot' + (sat > 0.85 ? '' : sat > 0.5 ? ' warn' : ' bad');
+    text($('kMood'), sat > 0.85 ? '😄' : sat > 0.7 ? '🙂' : sat > 0.5 ? '😐' : '😠');
+    $('moodBtn').setAttribute('aria-label', 'Guest mood: ' + (sat > 0.85 ? 'happy' : sat > 0.7 ? 'content' : sat > 0.5 ? 'restless' : 'grumpy'));
+    const anyCan = J.PARK_UPGRADES.some(u => S.cash >= J.parkCost(S, u.id));
+    $('parkFab').classList.toggle('can', anyCan);
     if (!$('moodModal').hidden) renderMood();
     const chips = [];
     for (const e of S.effects) if (e.until > S.time && EFFECT_LABEL[e.type]) chips.push(`<span class="chip gold">${EFFECT_LABEL[e.type]} · ${Math.ceil(e.until - S.time)}s</span>`);
-    for (const b of S.builds.slice(0, 2)) {
+    if (S.builds.length) {
+      // only the next build to finish; the map labels show the rest
+      const b = S.builds.reduce((a, c) => (c.end < a.end ? c : a));
       const what = b.kind === 'ride' ? J.rideDef(b.i).name : b.kind === 'land' ? 'New land' : J.rideDef(b.i).name + (b.kind === 'seats' ? ' seats' : ' speed');
-      chips.push(`<span class="chip build">🏗 ${esc(what)} · ${J.duration(timeLeft(b))}</span>`);
+      chips.push(`<span class="chip build">🏗 ${esc(what)} · ${J.duration(timeLeft(b))}${S.builds.length > 1 ? ` · +${S.builds.length - 1}` : ''}</span>`);
     }
     if (parkFull) chips.push('<span class="chip bad">Park full: buy land</span>');
     if (!P3 && S.inPark > MAX_SPRITES) chips.push(`<span class="chip">1 dot ≈ ${J.fmt(S.inPark / MAX_SPRITES, 0)} guests</span>`);
@@ -1074,25 +1024,45 @@
     const pct = v => Math.round(v * 100) + '%';
     const col = v => v >= 0.95 ? 'var(--mint)' : v >= 0.8 ? 'var(--warn)' : 'var(--bad)';
     const rows = [
-      ['Queues', m.queues, m.queues >= 0.95 ? 'Lines are short. Nice.' : 'Some lines are too long. Add seats, speed rides up, or build shade & benches.'],
-      ['Space', m.crowd, m.crowd >= 0.95 ? 'Plenty of room.' : 'The park is packed. Buy more land in the Park tab.'],
+      ['Queues', m.queues, m.queues >= 0.95 ? 'Lines are short. Nice.' : 'Some lines are too long. Add seats, speed rides up, or buy shade & lamps.'],
+      ['Space', m.crowd, m.crowd >= 0.95 ? 'Plenty of room.' : 'The park is packed. Buy more land in Park.'],
       ['Entry price', m.price, m.price >= 0.95 ? 'Guests think the price is fine.' : 'Guests find the entry ticket too pricey.'],
-      ['Food', m.food, m.food >= 0.95 ? 'Nobody is hungry.' : 'Guests are hungry. Buy snack stands in the Park tab.'],
+      ['Food', m.food, m.food >= 0.95 ? 'Nobody is hungry.' : 'Guests are hungry. Buy snack stands in Park.'],
     ];
-    const bonus = m.decor > 1 ? `<div class="moodrow"><b>Decorations</b><span class="pct" style="color:var(--mint)">+${Math.round((m.decor - 1) * 100)}%</span><span class="small">Guests love the pretty park.</span></div>` : '';
+    const bonus = m.decor > 1 ? `<div class="moodrow"><b>Gardens</b><span class="pct" style="color:var(--mint)">+${Math.round((m.decor - 1) * 100)}%</span><span class="small">Guests love the pretty park.</span></div>` : '';
     html($('moodList'), rows.map(([n, v, h]) => `<div class="moodrow"><b>${n}</b><span class="pct" style="color:${col(v)}">${pct(v)}</span><span class="small">${h}</span></div>`).join('') + bonus);
   }
   $('moodBtn').addEventListener('click', () => { renderMood(); openModal('moodModal'); });
   $('moodClose').addEventListener('click', () => closeModal('moodModal'));
 
+  // The sheet opens on demand: a ride (tap it on the map), the park upgrades, or the menu.
+  let sheetOpen = false;
   function setTab(t) {
     tab = t;
-    for (const b of document.querySelectorAll('.tab')) b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false');
-    for (const v of ['rides', 'park', 'decor', 'legacy', 'stats']) $('view-' + v).hidden = v !== t;
+    sheetOpen = true;
+    $('dock').hidden = false;
+    $('fabs').hidden = true;
+    for (const v of ['rides', 'park', 'legacy']) $('view-' + v).hidden = v !== t;
     if (t === 'rides') scrollToSel();
     refresh(true);
   }
-  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  function closeSheet() {
+    sheetOpen = false;
+    $('dock').hidden = true;
+    $('fabs').hidden = false;
+    $('sellConfirm').hidden = true;
+    tab = '';
+  }
+  document.querySelectorAll('.fab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  $('sheetClose').addEventListener('click', closeSheet);
+  $('cashBtn').addEventListener('click', () => setTab('legacy'));
+  // swipe the sheet down to close it
+  (function () {
+    let y0 = null;
+    const sh = document.querySelector('.sheet');
+    sh.addEventListener('touchstart', e => { y0 = sh.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+    sh.addEventListener('touchmove', e => { if (y0 !== null && e.touches[0].clientY - y0 > 70) { y0 = null; closeSheet(); } }, { passive: true });
+  })();
 
   let lastRefresh = 0;
   function refresh(force) {
@@ -1103,8 +1073,7 @@
     renderHud(snap);
     if (tab === 'rides') renderRides(snap);
     else if (tab === 'park') renderPark(snap);
-    else if (tab === 'stats') renderStats(snap);
-    else if (tab === 'decor') renderDecor();
+    else if (tab === 'legacy') renderStats(snap);
     renderGoals();
     renderLegacy();
     if (L && L.slots !== S.rides.length) layout();
@@ -1270,7 +1239,7 @@
     }
     // Start with the newest ride (or the empty lot) selected.
     sel = fresh ? 0 : Math.max(0, builtCount() - 1);
-    if (fresh) say('Welcome to your empty lot. Tap <b>Build your first ride</b> to begin.', true);
+    if (fresh) { say('Welcome to your empty lot. Tap <b>Build your first ride</b> to begin.', true); setTab('rides'); }
     else say(`Welcome back to <b>Park ${S.parkNumber}</b>.`, true);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitCache.clear());
     refresh(true);

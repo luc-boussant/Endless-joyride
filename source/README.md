@@ -29,3 +29,9 @@ Ad-free amusement park idle game. Playable link: https://claude.ai/artifact/4BjG
 - Builder crews: 1 + up to 3 more (Park tab). Master builders perk: −10% build time per level. Golden balloons can give crews coffee (−5 min on all builds).
 - Breakdowns: each ride breaks about once an hour (Mechanics make it rarer and repairs faster); a broken ride earns nothing and its line leaves unhappy. Tap Repair to fix it at once.
 - Bot sim (sessions of 20 min every 3 h, nights offline): rides 1–3 in the first 15 min, ride 4 after ~3 h, ride 8 on day 1, ride 12 around day 10. Sim script lives in the session scratchpad (bot2.js); rerun before balance changes.
+
+## v2.1 interface (2026-10-23, Luc: map too small, too much on screen, too many overlapping options)
+- The 3D map fills the screen. Floating on top: cash/income/guests pill (tap for menu), goal star with a progress ring, mood face. One chip for the next build to finish.
+- Nothing else shows until asked: tap a ride for its sheet, the Park button for upgrades and entry price, the ☰ button for golden tickets, stats, save code and help. Tap empty ground or swipe down to close.
+- Park upgrades cut to 7: land, snacks, gardens & fountains (+6% fun), shade & lamps (patience), mascots & statues (+12% arrivals), mechanics, builder crews. Decor tab, crew training and night security are gone; decorations on the map follow the matching upgrades. Offline income: 12 h at 50%. Ride levels add 8% throughput each (replacing crew training).
+- Ride sheet: Upgrade +1 / Upgrade max, Seats, Faster, Hire staff. The ×1/×10/×25 selector is gone.

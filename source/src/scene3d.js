@@ -731,13 +731,14 @@
     // Decorations from the layout spots
     let fountains = [];
     function buildDecor(S) {
-      const key = JSON.stringify(S.decor) + L.spots.length;
+      const d = hooks.decor(S);
+      const key = JSON.stringify(d) + L.spots.length;
       if (key === decorKey) return;
       decorKey = key;
       if (decorGroup) world.remove(decorGroup);
       decorGroup = new T.Group();
       fountains = [];
-      const d = S.decor, b = new B(), glow = [];
+      const b = new B(), glow = [];
       const nl = Math.min(d.lamps, L.lampSpots.length);
       for (let k = 0; k < nl; k++) {
         const [x, z] = toW(...L.lampSpots[(k * 7) % L.lampSpots.length]);
@@ -890,7 +891,7 @@
       if (tapStart && !tapStart.moved && performance.now() - tapStart.t < 450 && ptrs.size === 0) {
         cam.vx = cam.vz = 0;
         const i = pickLot(e.clientX, e.clientY);
-        if (i >= 0) hooks.onSelect(i);
+        if (i >= 0) hooks.onSelect(i); else hooks.onBackground();
       }
       if (ptrs.size === 0) tapStart = null;
     };
@@ -914,7 +915,10 @@
       }
       if (!ray.ray.intersectPlane(plane, hit)) return -1;
       const px = (hit.x + ox) / K, py = (hit.z + oz) / K;
-      return L.plots.findIndex(p => px >= p.x - 6 && px <= p.x + p.w + 6 && py >= p.y - 6 && py <= p.y + p.h + 6);
+      // nearest lot, generously: the label strip under each lot counts too
+      let best = -1, bd = Infinity;
+      L.plots.forEach((p, k) => { const d = Math.hypot(px - p.cx, (py - p.cy) * 0.9); if (d < bd) { bd = d; best = k; } });
+      return bd < Math.max(L.plotW, L.plotH) * 0.75 ? best : -1;
     }
 
     // ---------- Per-frame ----------
@@ -941,7 +945,8 @@
       focus(i) {
         if (!L || !L.plots[i]) return;
         const [x, z] = toW(L.plots[i].cx, L.plots[i].cy);
-        cam.tx = cam.dist < fitDist() * 0.9 ? x : 0; cam.tz = z;
+        cam.tx = cam.dist < fitDist() * 0.9 ? x : 0;
+        cam.tz = z + (hooks.sheetOpen() ? cam.dist * 0.28 : 0); // keep the ride above the open sheet
       },
       // World position (map pixels) to screen, for overlay labels.
       toScreen(px, py, h) { if (!L) return null; const [x, z] = toW(px, py); return project(x, h || 0, z); },

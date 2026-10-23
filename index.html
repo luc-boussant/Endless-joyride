@@ -48,83 +48,71 @@ body {
 button { font: inherit; color: inherit; cursor: pointer; }
 :focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 
-.app {
-  height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px;
-  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 8px 0;
-}
-.pwa .app { padding-top: max(8px, env(safe-area-inset-top, 0px)); }
+.app { position: fixed; inset: 0; }
 
-/* HUD */
-.hud { display: grid; gap: 6px; }
-.brandrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.brand { font-family: var(--display); font-size: 17px; letter-spacing: .03em; color: var(--gold); line-height: 1; text-shadow: 0 0 12px rgba(255, 201, 74, .45); }
-.parkno { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.bulbs { height: 6px; background: radial-gradient(circle at 3px 3px, var(--gold) 2px, transparent 2.6px) 0 0 / 14px 6px repeat-x; opacity: .9; animation: twinkle 1.6s steps(2) infinite; }
-@keyframes twinkle { 50% { background-position: 7px 0; } }
-.kpis { display: grid; grid-template-columns: 1.35fr 1fr 1.2fr auto; gap: 8px; background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 7px 12px; align-items: end; }
-.kpi { min-width: 0; display: flex; flex-direction: column; }
-.kpi .lab { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
-.kpi .val { font-weight: 800; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kpi.cash .val { font-family: var(--display); font-weight: 400; font-size: 21px; line-height: 1.05; color: var(--gold); }
-.mood { display: inline-flex; gap: 5px; align-items: center; }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 8px var(--mint); flex: none; }
-.dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); } .dot.bad { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+/* Map: the whole screen. Everything else floats over it and stays out of the way until asked for. */
+.map { position: absolute; inset: 0; overflow: hidden; background: #183d33; }
+.mapscroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+canvas#park { display: block; width: 100%; }
+.map.three .mapscroll { overflow: hidden; }
+.map.three canvas#park { position: absolute; inset: 0; pointer-events: none; }
+canvas.gl { display: block; position: absolute; inset: 0; touch-action: none; }
 
-/* Goal bar */
-.goalbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); background: linear-gradient(90deg, rgba(255, 201, 74, .14), rgba(255, 201, 74, .03)); border-radius: 12px; padding: 5px 10px; text-align: left; }
-.gicon { color: var(--gold); font-size: 15px; text-shadow: 0 0 8px rgba(255, 201, 74, .6); }
-.gtext { display: grid; gap: 3px; min-width: 0; }
-.glabel { font-weight: 700; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gprog { height: 4px; border-radius: 3px; background: var(--night); overflow: hidden; }
-.gprog i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .4s; }
-.gcount { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+/* Top overlay: cash, goals, mood */
+.hud { position: absolute; left: 0; right: 0; top: 0; padding: max(10px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px)); display: grid; grid-template-columns: minmax(0, auto) 1fr auto; gap: 8px; align-items: start; pointer-events: none; z-index: 5; }
+.hud > * { pointer-events: auto; }
+.glass { background: rgba(16, 21, 48, .78); border: 1px solid rgba(255, 255, 255, .1); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 6px 20px rgba(0, 0, 0, .25); }
+.cashpill { border-radius: 16px; padding: 6px 14px 7px; display: grid; min-width: 0; border: 0; text-align: left; }
+.cashpill .val { font-family: var(--display); font-size: 22px; line-height: 1.05; color: var(--gold); white-space: nowrap; text-shadow: 0 0 12px rgba(255, 201, 74, .35); }
+.cashpill .sub { font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cashpill .sub b { color: var(--ink); }
+.hudbtns { grid-column: 3; display: flex; gap: 8px; }
+.round { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; padding: 0; font-size: 22px; position: relative; color: var(--ink); }
+.goalbtn { background: conic-gradient(var(--gold) calc(var(--p, 0) * 1turn), rgba(255, 255, 255, .12) 0) border-box; border: 3px solid transparent; }
+.goalbtn::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: rgba(16, 21, 48, .92); }
+.goalbtn span { position: relative; color: var(--gold); font-size: 20px; text-shadow: 0 0 8px rgba(255, 201, 74, .6); }
+.goalbtn.ready span { animation: pulse 1s ease-in-out infinite alternate; }
+@keyframes pulse { to { transform: scale(1.2); } }
+.chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; pointer-events: none; }
+.chip { padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; background: rgba(16, 21, 48, .8); border: 1px solid rgba(255, 255, 255, .1); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.chip.gold { background: var(--gold); color: #2a1c00; border-color: transparent; }
+.chip.bad { background: var(--bad); color: #fff; border-color: transparent; }
+.chip.build { color: #bfe6ff; }
+.ticker { display: none; }
+.balloon { position: absolute; width: 50px; height: 66px; border: 0; background: none; padding: 0; z-index: 3; filter: drop-shadow(0 0 10px rgba(255, 201, 74, .6)); }
+.balloon svg { width: 100%; height: 100%; display: block; }
 .goalrow { display: grid; gap: 4px; background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 .goalrow .gl { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 13px; }
 .goalrow .gl span:last-child { color: var(--muted); font-weight: 600; white-space: nowrap; }
-.mgr { border: 1px solid var(--line); background: var(--night-3); border-radius: 10px; padding: 4px 10px; font-weight: 700; font-size: 12px; text-align: right; display: grid; line-height: 1.2; min-width: 0; }
-.mgr small { color: var(--muted); font-weight: 600; font-size: 11px; white-space: nowrap; }
-.mgr.can { border-color: var(--gold); color: var(--gold); }
-.mgr.max { opacity: .6; }
-
-.moodbtn { border: 0; background: none; padding: 0; text-align: left; }
+.gprog { height: 4px; border-radius: 3px; background: var(--night-3); overflow: hidden; }
+.gprog i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .4s; }
 .moodrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
 .moodrow b { font-size: 13px; }
 .moodrow .pct { font-weight: 800; text-align: right; }
 .moodrow .small { grid-column: 1 / -1; }
 
-/* Map */
-.map { position: relative; min-height: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #183d33; }
-.mapscroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-canvas#park { display: block; width: 100%; }
-/* 3D park: the WebGL view fills the map; the old canvas becomes a label layer on top. Drag to move, pinch to zoom. */
-.map.three .mapscroll { overflow: hidden; }
-.map.three canvas#park { position: absolute; inset: 0; pointer-events: none; }
-canvas.gl { display: block; position: absolute; inset: 0; touch-action: none; }
-.chips { position: absolute; left: 8px; right: 8px; top: 8px; display: flex; flex-wrap: wrap; gap: 5px; pointer-events: none; }
-.chip { padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; background: rgba(18, 24, 52, .82); border: 1px solid var(--line); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
-.chip.gold { background: var(--gold); color: #2a1c00; border-color: transparent; }
-.chip.bad { background: var(--bad); color: #fff; border-color: transparent; }
-.chip.build { color: #bfe6ff; }
-.ticker { position: absolute; left: 8px; right: 8px; bottom: 8px; pointer-events: none; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
-.ticker div { max-width: 100%; padding: 3px 10px; border-radius: 10px; background: rgba(18, 24, 52, .8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
-.ticker div:first-child { color: var(--ink); }
-.ticker b { color: var(--gold); font-weight: 700; }
-.balloon { position: absolute; width: 50px; height: 66px; border: 0; background: none; padding: 0; z-index: 3; filter: drop-shadow(0 0 10px rgba(255, 201, 74, .6)); }
-.balloon svg { width: 100%; height: 100%; display: block; }
+/* Bottom-right buttons that open the park and the menu */
+.fabs { position: absolute; right: max(12px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 10px; z-index: 5; }
+.fab { border: 0; border-radius: 18px; padding: 9px 16px; display: flex; align-items: center; gap: 7px; font-weight: 800; font-size: 14px; position: relative; color: var(--ink); }
+.fab svg { width: 20px; height: 20px; }
+.fab.can { box-shadow: 0 0 0 2px var(--candy), 0 6px 20px rgba(0, 0, 0, .25); }
+.badge { position: absolute; top: -6px; right: -4px; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--candy); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
 
-/* Dock */
-.dock { min-height: 0; display: flex; flex-direction: column; gap: 6px; }
-.sheet { height: clamp(236px, 38dvh, 300px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
-.view { display: flex; flex-direction: column; gap: 8px; flex: 1; }
-.tabbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px 0 max(8px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
-.tab { border: 0; background: none; padding: 5px 2px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--muted); font-weight: 700; font-size: 11.5px; position: relative; }
-.tab svg { width: 22px; height: 22px; }
-.tab[aria-selected="true"] { color: var(--gold); }
-.tab .badge { position: absolute; top: 0; right: calc(50% - 22px); min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--candy); color: #fff; font-size: 10px; line-height: 16px; }
+/* Sheet: slides up over the map only when a ride, the park or the menu is opened */
+.dock { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 0 max(8px, env(safe-area-inset-right, 0px)) 0 max(8px, env(safe-area-inset-left, 0px)); animation: up .2s ease-out; }
+@keyframes up { from { transform: translateY(30px); opacity: 0; } }
+.sheet { max-height: min(62dvh, 560px); overflow-y: auto; overscroll-behavior: contain; border-radius: 22px 22px 0 0; padding: 4px 12px max(12px, env(safe-area-inset-bottom, 0px)); background: rgba(18, 24, 52, .94); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--line); border-bottom: 0; box-shadow: 0 -10px 30px rgba(0, 0, 0, .35); }
+.sheethead { position: sticky; top: -4px; display: flex; justify-content: center; align-items: center; min-height: 40px; padding: 4px 0; background: inherit; z-index: 1; }
+.grab { width: 40px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .25); }
+.closex { position: absolute; right: 0; top: 4px; width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--night-3); font-size: 16px; display: grid; place-items: center; }
+.view { display: flex; flex-direction: column; gap: 8px; }
+.sectionh { font-family: var(--display); font-size: 14px; color: var(--gold); margin: 6px 2px 0; font-weight: 400; }
 
 .panel { background: var(--night-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; }
 .ridehead { display: grid; grid-template-columns: 34px 44px minmax(0, 1fr) auto 34px; gap: 8px; align-items: center; }
+.statline { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.statline b { color: var(--ink); }
+.statline .warn { color: var(--warn); font-weight: 700; } .statline .bad { color: var(--bad); font-weight: 700; }
 .nav { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--night-3); font-size: 18px; line-height: 1; display: grid; place-items: center; }
 .ricon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25), 0 0 14px rgba(255,255,255,.08); }
 .rname { font-weight: 800; font-size: 16px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -139,7 +127,8 @@ canvas.gl { display: block; position: absolute; inset: 0; touch-action: none; }
 .load i.warn { background: var(--warn); } .load i.bad { background: var(--bad); } .load i.build { background: #6cc4ff; }
 .note { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .note b { color: var(--gold); }
-.btns { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 6px; }
+.btns { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.btns .btn { grid-column: span 2; } .btns .btn.half { grid-column: span 3; } .btns .btn.full { grid-column: 1 / -1; }
 .btn {
   border: 0; border-radius: 12px; padding: 7px 9px 9px; text-align: left; min-width: 0; display: flex; flex-direction: column; gap: 0;
   background: var(--night-3); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .3); transition: transform .05s;
@@ -151,7 +140,7 @@ canvas.gl { display: block; position: absolute; inset: 0; touch-action: none; }
 .btn.primary .c { color: #ffe3e9; }
 .btn.goldb { background: linear-gradient(var(--gold), #f5b52c); box-shadow: inset 0 -3px 0 var(--gold-deep); color: #2a1c00; }
 .btn.goldb .c { color: #5a3d00; }
-.btn.danger { background: linear-gradient(#ff6b5d, #e4433a); box-shadow: inset 0 -3px 0 #a3261f; color: #fff; grid-column: 1 / -1; }
+.btn.danger { background: linear-gradient(#ff6b5d, #e4433a); box-shadow: inset 0 -3px 0 #a3261f; color: #fff; }
 .btn.danger .c { color: #ffe0dc; }
 .btn.off { opacity: .5; }
 .btn.max { opacity: .5; }
@@ -195,102 +184,75 @@ input[type="range"] { width: 100%; accent-color: var(--candy); margin: 2px 0; }
 .modal .panel { width: 100%; max-width: 420px; display: grid; gap: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); -webkit-user-select: text; user-select: text; }
 .modal h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 19px; color: var(--gold); }
 textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid var(--line); background: var(--night); color: var(--ink); padding: 8px; font: 12px ui-monospace, Menlo, monospace; resize: vertical; -webkit-user-select: text; user-select: text; }
-.toasts { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 92px); display: flex; flex-direction: column; gap: 6px; z-index: 15; pointer-events: none; width: min(92vw, 380px); }
+.toasts { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 74px); display: flex; flex-direction: column; gap: 6px; z-index: 15; pointer-events: none; width: min(92vw, 380px); }
 .toast { background: var(--ink); color: var(--night); padding: 8px 14px; border-radius: 12px; font-weight: 700; font-size: 13px; text-align: center; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); animation: pop .25s ease-out; }
 @keyframes pop { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .toast, .bulbs { animation: none; } .load i { transition: none; } }
 
-/* Wide screens: map on the left, dock on the right. */
+/* Wide screens: the sheet becomes a floating side panel. */
 @media (min-width: 900px) {
-  .app { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto minmax(0, 1fr); padding-block: 12px 16px; column-gap: 16px; }
-  .hud { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 1fr) minmax(0, 560px); align-items: center; column-gap: 20px; }
-  .goalbar { grid-column: 2; grid-row: 1; max-width: 420px; justify-self: center; width: 100%; }
-  .kpis { grid-column: 3; grid-row: 1; }
-  .brandrow { flex-direction: column; align-items: flex-start; }
-  .dock { flex-direction: column-reverse; justify-content: flex-end; }
-  .sheet { height: auto; flex: 1; }
-  .tabbar { border-top: 0; border: 1px solid var(--line); border-radius: 14px; padding: 4px; background: var(--night-2); }
-  .tab { flex-direction: row; justify-content: center; gap: 6px; font-size: 13px; padding: 7px 2px; }
-  .tab svg { width: 18px; height: 18px; }
-  .tab .badge { position: static; }
-  .tiles { grid-template-columns: minmax(0, 1fr); }
-  .bulbs { display: none; }
-}
-@media (max-height: 720px) and (max-width: 899px) {
-  .brandrow, .bulbs { display: none; }
-  .sheet { height: 262px; }
+  .dock { left: auto; right: 16px; top: 80px; bottom: 16px; width: 400px; padding: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+  .sheet { max-height: 100%; border-radius: 22px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+  .fabs { bottom: 20px; right: 20px; }
 }
 </style>
 
 </head>
 <body>
 <div class="app">
-  <header class="hud">
-    <div class="brandrow"><span class="brand">ENDLESS JOYLAND</span><span class="parkno" id="parkNo">Park 1</span></div>
-    <div class="kpis">
-      <div class="kpi cash"><span class="lab">Cash</span><span class="val" id="kCash">$0</span></div>
-      <div class="kpi"><span class="lab">Income</span><span class="val" id="kInc">$0/s</span></div>
-      <div class="kpi"><span class="lab">Guests</span><span class="val" id="kVis">0</span></div>
-      <button class="kpi moodbtn" id="moodBtn" aria-label="Show what guests think"><span class="lab">Mood ›</span><span class="val mood"><i class="dot" id="kMoodDot"></i><span id="kMood">Happy</span></span></button>
-    </div>
-    <button class="goalbar" id="goalbar" aria-label="Show goals">
-      <span class="gicon" aria-hidden="true">★</span>
-      <span class="gtext"><span class="glabel" id="gLabel">Goals</span><span class="gprog"><i id="gBar"></i></span></span>
-      <span class="gcount" id="gCount"></span>
-    </button>
-    <div class="bulbs" aria-hidden="true"></div>
-  </header>
-
   <section class="map" id="map" aria-label="Your park">
     <div class="mapscroll" id="mapscroll"><canvas id="park" aria-label="Park map. Tap a ride to manage it."></canvas></div>
-    <div class="chips" id="chips"></div>
     <div class="ticker" id="ticker" aria-live="polite"></div>
   </section>
 
-  <section class="dock">
+  <header class="hud">
+    <button class="cashpill glass" id="cashBtn" aria-label="Park stats">
+      <span class="val" id="kCash">$0</span>
+      <span class="sub"><b id="kInc">$0/s</b> · <span id="kVis">0</span> guests</span>
+    </button>
+    <div class="hudbtns">
+      <button class="round goalbtn" id="goalbar" aria-label="Goals"><span aria-hidden="true">★</span></button>
+      <button class="round glass" id="moodBtn" aria-label="Guest mood"><span id="kMood">😄</span></button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <nav class="fabs" id="fabs">
+    <button class="fab glass" data-tab="park" id="parkFab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"/></svg>Park</button>
+    <button class="fab glass" data-tab="legacy" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="badge" id="legacyBadge" hidden></span></button>
+  </nav>
+
+  <section class="dock" id="dock" hidden>
     <div class="sheet">
+      <div class="sheethead"><span class="grab"></span><button class="closex" id="sheetClose" aria-label="Close">✕</button></div>
       <div class="view" id="view-rides"></div>
 
       <div class="view" id="view-park" hidden>
+        <div class="tiles" id="parkTiles"></div>
         <div class="panel pricebox">
           <div class="row1"><span>Entry ticket <b id="priceVal">$0</b> · <span id="priceLabel">Fair</span></span><span class="small" id="priceEffect"></span></div>
           <input type="range" id="priceSlider" min="0" max="150" step="1" value="50" aria-label="Entry ticket price">
         </div>
-        <div class="tiles" id="parkTiles"></div>
-      </div>
-
-      <div class="view" id="view-decor" hidden>
-        <div class="small" style="padding-inline:2px">Decorations appear on your map and make every ride more fun.</div>
-        <div class="tiles" id="decorTiles"></div>
       </div>
 
       <div class="view" id="view-legacy" hidden>
+        <h3 class="sectionh">Golden tickets</h3>
         <div class="panel legacytop">
-          <div><div class="big" id="tixHave">0</div><div class="small">golden tickets</div></div>
+          <div><div class="big" id="tixHave">0</div><div class="small">tickets</div></div>
           <div class="small" id="tixInfo"></div>
           <div id="sellBox"><button class="btn goldb" id="sellBtn"><span class="t">Sell park</span><span class="c" id="sellC">+0</span></button></div>
         </div>
         <div class="panel" id="sellConfirm" hidden>
-          <div class="footrow"><span>Sell this park for <b id="sellGain"></b>? You start over with your tickets and perks.</span></div>
+          <div>Sell this park for <b id="sellGain"></b>? You start over with your tickets and perks.</div>
           <div class="rowbtns" style="margin-top:8px"><button class="plain go" id="sellYes">Sell it</button><button class="plain" id="sellNo">Keep playing</button></div>
         </div>
         <div class="tiles" id="perkTiles"></div>
-      </div>
-
-      <div class="view" id="view-stats" hidden>
+        <h3 class="sectionh"><span id="parkNo">Park 1</span> stats</h3>
         <div class="panel"><div class="statgrid" id="statGrid"></div></div>
         <div class="rowbtns"><button class="plain" id="saveOpen">Save code</button><button class="plain" id="helpOpen">How to play</button><button class="plain danger" id="resetOpen">Erase</button></div>
-        <div class="small" style="padding-inline:2px">Game version 2026-10-23 · c0c222</div>
+        <div class="small" style="padding-inline:2px">Game version 2026-10-23 · 79d8d4</div>
       </div>
     </div>
-
-    <nav class="tabbar" role="tablist">
-      <button class="tab" role="tab" data-tab="rides" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="10" r="7"/><path d="M12 3v14M5 10h14M7 5l10 10M17 5 7 15M8 21l4-4 4 4"/></svg>Rides</button>
-      <button class="tab" role="tab" data-tab="park" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"/></svg>Park</button>
-      <button class="tab" role="tab" data-tab="decor" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-8"/><circle cx="12" cy="8" r="3"/><path d="M12 5V3M15 8h2M7 8h2M14.5 5.5 16 4M8 4l1.5 1.5"/><path d="M8 21c0-3 2-4 4-4s4 1 4 4"/></svg>Decor</button>
-      <button class="tab" role="tab" data-tab="legacy" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 8h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 8v10" stroke-dasharray="2 2"/></svg>Legacy<span class="badge" id="legacyBadge" hidden></span></button>
-      <button class="tab" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Stats</button>
-    </nav>
   </section>
 </div>
 
@@ -425,10 +387,9 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   const PARK_UPGRADES = [
     { id: 'land', name: 'Buy more land', desc: 'Park capacity ×1.6', base: 250, growth: 3.2 },
     { id: 'food', name: 'Snack stands', desc: 'Visitors spend more on food and drinks between rides', base: 80, growth: 1.6 },
-    { id: 'mascot', name: 'Mascot parades', desc: '+12% visitor arrivals', base: 400, growth: 1.9 },
-    { id: 'crew', name: 'Ride crew training', desc: '+10% throughput on every ride', base: 500, growth: 1.85 },
-    { id: 'comfort', name: 'Shade, benches & restrooms', desc: 'Visitors tolerate +15 s more queueing', base: 300, growth: 2.1, max: 20 },
-    { id: 'night', name: 'Night security', desc: '+1 h offline time and +2% offline earnings', base: 2000, growth: 3, max: 22 },
+    { id: 'gardens', name: 'Gardens & fountains', desc: '+6% fun on every ride', base: 150, growth: 1.7 },
+    { id: 'comfort', name: 'Shade & lamps', desc: 'Visitors queue 15 s longer happily', base: 300, growth: 2.1, max: 20 },
+    { id: 'mascot', name: 'Mascots & statues', desc: '+12% visitor arrivals', base: 400, growth: 1.9 },
     { id: 'mech', name: 'Mechanics', desc: 'Rides break down less and get fixed faster', base: 350, growth: 2.3, max: 20 },
     { id: 'crews', name: 'Construction crews', desc: 'Build one more thing at the same time', base: 5e4, growth: 100, max: 3 },
   ];
@@ -452,13 +413,11 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   ];
 
   // ---------- Decorations ----------
-  const DECOR = [
-    { id: 'flowers', name: 'Flower beds', desc: '+3% fun on every ride', base: 150, growth: 1.6 },
-    { id: 'lamps', name: 'Lamp posts', desc: 'Guests queue 5 s longer happily', base: 800, growth: 1.9 },
-    { id: 'fountain', name: 'Fountains', desc: '+8% fun on every ride', base: 6000, growth: 2.3 },
-    { id: 'statue', name: 'Mascot statues', desc: '+10% guest arrivals', base: 1.2e5, growth: 3 },
-  ];
-  const DEC = Object.fromEntries(DECOR.map(d => [d.id, d]));
+  // What the map shows, derived from the park upgrades that pay for it.
+  function decorView(s) {
+    const p = s.park;
+    return { flowers: Math.min(40, p.gardens * 2), fountain: Math.min(6, Math.floor(p.gardens / 3)), lamps: p.comfort, statue: Math.min(6, Math.floor(p.mascot / 3)) };
+  }
 
   function newRide() { return { lvl: 0, cap: 0, spd: 0, queue: 0, mgr: 0, broken: 0 }; }
 
@@ -468,7 +427,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       cash: 15,
       time: 0,
       rides: [newRide()],
-      park: { land: 0, food: 0, mascot: 0, crew: 0, comfort: 0, night: 0, mech: 0, crews: 0 },
+      park: { land: 0, food: 0, gardens: 0, comfort: 0, mascot: 0, mech: 0, crews: 0 },
       builds: [],          // {kind, i, start, end} in wall-clock ms
       priceRatio: 0.5,
       inPark: 0,
@@ -478,7 +437,6 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       ticketsEarned: 0,     // tickets ever earned from selling parks
       ticketsSpent: 0,
       perks: { seed: 0, fame: 0, thrift: 0, patience: 0, builder: 0 },
-      decor: { flowers: 0, lamps: 0, fountain: 0, statue: 0 },
       goals: [],
       goalsDone: 0,
       parkNumber: 1,
@@ -511,7 +469,9 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     s.park = Object.assign(newState().park, raw.park || {});
     s.perks = Object.assign(newState().perks, raw.perks || {});
     s.rate = Object.assign(newState().rate, raw.rate || {});
-    s.decor = Object.assign(newState().decor, raw.decor || {});
+    if (raw.decor && !(raw.park && raw.park.gardens !== undefined)) s.park.gardens = (raw.decor.flowers || 0) + (raw.decor.fountain || 0);
+    for (const k of Object.keys(s.park)) if (!(k in newState().park)) delete s.park[k];
+    delete s.decor;
     if (!Array.isArray(s.goals)) s.goals = [];
     if (!Array.isArray(s.builds)) s.builds = [];
     if (!Array.isArray(s.rides) || !s.rides.length) s.rides = [newRide()];
@@ -529,10 +489,9 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     const t = s.ticketsEarned; // every ticket ever earned counts, spent or not
     return {
       incomeMult: (1 + 0.03 * t) * (hasEffect(s, 'boost') ? 2 : 1),
-      arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t) * (1 + 0.1 * s.decor.statue),
-      decorFun: 1 + 0.03 * s.decor.flowers + 0.08 * s.decor.fountain,
-      crewMult: 1 + 0.1 * s.park.crew,
-      tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience + 5 * s.decor.lamps,
+      arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t),
+      decorFun: 1 + 0.06 * s.park.gardens,
+      tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience,
       capacity: Math.floor(60 * Math.pow(1.6, s.park.land)),
       foodRate: 0.04 * (1 - Math.pow(0.93, s.park.food)),
       costMult: Math.pow(0.95, s.perks.thrift),
@@ -554,7 +513,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       price: d.price0 * (1 + 0.15 * (r.lvl - 1)) * Math.pow(2, m) * g.incomeMult * (r.mgr >= 1 ? 2 : 1) * (r.mgr >= 3 ? 2 : 1),
       cycle: d.cycle * Math.pow(0.88, r.spd),
       broken: r.broken > 0,
-      throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.02 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * g.crewMult * (r.mgr >= 2 ? 1.5 : 1),
+      throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.08 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * (r.mgr >= 2 ? 1.5 : 1),
     };
   }
 
@@ -607,7 +566,6 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     const r = s.rides[i];
     return r.mgr >= MANAGERS.length ? Infinity : rideDef(i).cost0 * MANAGERS[r.mgr].cost * globals(s).costMult;
   }
-  function decorCost(s, id) { return DEC[id].base * Math.pow(DEC[id].growth, s.decor[id]); }
   function parkCost(s, id) {
     const u = UPG[id], l = s.park[id];
     return u.max !== undefined && l >= u.max ? Infinity : u.base * Math.pow(u.growth, l);
@@ -669,7 +627,6 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   function buySpeed(s, i) { return s.rides[i].spd < MAX_SPEED && startBuild(s, 'speed', i, speedCost(s, i)); }
   function repair(s, i) { const r = s.rides[i]; if (!(r.broken > 0)) return false; r.broken = 0; return true; }
   function buyManager(s, i) { if (!s.rides[i].lvl || !spend(s, managerCost(s, i))) return false; s.rides[i].mgr++; return true; }
-  function buyDecor(s, id) { if (!spend(s, decorCost(s, id))) return false; s.decor[id]++; return true; }
   function buyPark(s, id) {
     if (id === 'land') return startBuild(s, 'land', undefined, parkCost(s, id));
     if (!spend(s, parkCost(s, id))) return false; s.park[id]++; return true;
@@ -700,8 +657,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     if (built.length) add(2, { type: 'guests', target: nice(Math.max(15, s.inPark * 1.5)) });
     add(2, { type: 'earn', target: nice(Math.max(200, s.runEarned * 2.5)) });
     if (built.length) add(1, { type: 'land', target: s.park.land + 1 });
-    const d = DECOR[Math.floor(rnd() * DECOR.length)];
-    if (s.runEarned > d.base * 3) add(1, { type: 'decor', id: d.id, target: s.decor[d.id] + 1 });
+    const u = ['food', 'gardens', 'comfort', 'mascot'][Math.floor(rnd() * 4)];
+    if (s.runEarned > UPG[u].base * 3) add(1, { type: 'upgrade', id: u, target: s.park[u] + 1 });
     const mi = built.find(i => s.rides[i].mgr < MANAGERS.length && s.runEarned > managerCost(s, i) * 0.3);
     if (mi !== undefined) add(1.5, { type: 'manager', i: mi, target: s.rides[mi].mgr + 1 });
     if (!opts.length) return { type: 'earn', target: nice(Math.max(200, s.runEarned * 4)) };
@@ -718,7 +675,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       case 'guests': return { label: `Have ${fmt(g.target)} guests in the park`, value: s.inPark, target: g.target };
       case 'earn': return { label: `Earn ${money(g.target)} in this park`, value: s.runEarned, target: g.target };
       case 'land': return { label: 'Buy more land', value: s.park.land, target: g.target };
-      case 'decor': return { label: 'Add ' + DEC[g.id].name.toLowerCase().replace(/s$/, ''), value: s.decor[g.id], target: g.target };
+      case 'upgrade': return { label: `${UPG[g.id] ? UPG[g.id].name : 'Park upgrade'} to level ${g.target}`, value: UPG[g.id] ? s.park[g.id] : g.target, target: g.target };
+      case 'decor': return { label: 'Old goal', value: 1, target: 1 };
       case 'manager': return { label: `Hire a ${MANAGERS[g.target - 1].name.toLowerCase()} for the ${name}`, value: r ? r.mgr : 0, target: g.target };
     }
     return { label: '', value: 1, target: 1 };
@@ -754,7 +712,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   }
 
   function offlineLimits(s) {
-    return { hours: 4 + s.park.night, eff: 0.5 + 0.02 * s.park.night };
+    return { hours: 12, eff: 0.5 };
   }
 
   // ---------- Simulation ----------
@@ -853,7 +811,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       crowd: fill <= 0.85 ? 1 : Math.max(0.8, 1 - (fill - 0.85) * 1.4),
       price: Math.max(0.5, 1 - Math.max(0, s.priceRatio - 0.6) * 0.5),
       food: s.time < 90 ? 1 : Math.min(1, 0.8 + 0.04 * s.park.food),
-      decor: 1 + Math.min(0.15, 0.01 * s.decor.flowers + 0.03 * s.decor.fountain + 0.02 * s.decor.statue),
+      decor: 1 + Math.min(0.15, 0.015 * s.park.gardens),
     };
     s.mood = mood;
     const target = Math.min(1, mood.queues * mood.crowd * mood.price * mood.food * mood.decor);
@@ -963,15 +921,15 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   function duration(sec) {
     sec = Math.max(0, Math.round(sec));
     if (sec < 60) return sec + ' s';
-    if (sec < 3600) return Math.floor(sec / 60) + ' min ' + (sec % 60 ? (sec % 60) + ' s' : '');
+    if (sec < 3600) return Math.floor(sec / 60) + ' min' + (sec % 60 ? ' ' + (sec % 60) + ' s' : '');
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
     return h + ' h' + (m ? ' ' + m + ' min' : '');
   }
 
   root.Joyland = {
-    STAY, RIDE_EVERY, MAX_SPEED, TICKET_SCALE, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, DECOR,
+    STAY, RIDE_EVERY, MAX_SPEED, TICKET_SCALE, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, decorView,
     setClock: f => { clock = f; }, now: () => clock(), buildTime, buildFor, busyCrews, canBuild, processBuilds, rushBuilds, repair,
-    managerCost, decorCost, buyManager, buyDecor, checkGoals, goalInfo,
+    managerCost, buyManager, checkGoals, goalInfo,
     rideDef, milestonesPassed, nextMilestone, newState, migrate, globals, rideStats, snapshot, priceLabel,
     levelCost, maxLevels, seatCost, speedCost, parkCost, perkCost, seedCash,
     buyLevels, buySeats, buySpeed, buyPark, buyPerk, tickets, pendingTickets, ticketsTotalFor, sellPark,
@@ -1712,13 +1670,14 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     // Decorations from the layout spots
     let fountains = [];
     function buildDecor(S) {
-      const key = JSON.stringify(S.decor) + L.spots.length;
+      const d = hooks.decor(S);
+      const key = JSON.stringify(d) + L.spots.length;
       if (key === decorKey) return;
       decorKey = key;
       if (decorGroup) world.remove(decorGroup);
       decorGroup = new T.Group();
       fountains = [];
-      const d = S.decor, b = new B(), glow = [];
+      const b = new B(), glow = [];
       const nl = Math.min(d.lamps, L.lampSpots.length);
       for (let k = 0; k < nl; k++) {
         const [x, z] = toW(...L.lampSpots[(k * 7) % L.lampSpots.length]);
@@ -1871,7 +1830,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       if (tapStart && !tapStart.moved && performance.now() - tapStart.t < 450 && ptrs.size === 0) {
         cam.vx = cam.vz = 0;
         const i = pickLot(e.clientX, e.clientY);
-        if (i >= 0) hooks.onSelect(i);
+        if (i >= 0) hooks.onSelect(i); else hooks.onBackground();
       }
       if (ptrs.size === 0) tapStart = null;
     };
@@ -1895,7 +1854,10 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       }
       if (!ray.ray.intersectPlane(plane, hit)) return -1;
       const px = (hit.x + ox) / K, py = (hit.z + oz) / K;
-      return L.plots.findIndex(p => px >= p.x - 6 && px <= p.x + p.w + 6 && py >= p.y - 6 && py <= p.y + p.h + 6);
+      // nearest lot, generously: the label strip under each lot counts too
+      let best = -1, bd = Infinity;
+      L.plots.forEach((p, k) => { const d = Math.hypot(px - p.cx, (py - p.cy) * 0.9); if (d < bd) { bd = d; best = k; } });
+      return bd < Math.max(L.plotW, L.plotH) * 0.75 ? best : -1;
     }
 
     // ---------- Per-frame ----------
@@ -1922,7 +1884,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       focus(i) {
         if (!L || !L.plots[i]) return;
         const [x, z] = toW(L.plots[i].cx, L.plots[i].cy);
-        cam.tx = cam.dist < fitDist() * 0.9 ? x : 0; cam.tz = z;
+        cam.tx = cam.dist < fitDist() * 0.9 ? x : 0;
+        cam.tz = z + (hooks.sheetOpen() ? cam.dist * 0.28 : 0); // keep the ride above the open sheet
       },
       // World position (map pixels) to screen, for overlay labels.
       toScreen(px, py, h) { if (!L) return null; const [x, z] = toW(px, py); return project(x, h || 0, z); },
@@ -2020,8 +1983,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let S = null;
-  let bulk = 1;
-  let tab = 'rides';
+  let tab = '';           // open sheet: 'rides', 'park', 'legacy', or '' when closed
   let sel = 0;            // selected ride / lot index
   let lastTick = performance.now();
   let lastSave = 0;
@@ -2094,6 +2056,9 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       def: i => J.rideDef(i),
       hue: i => rideHue(i),
       onSelect: i => { sel = i; setTab('rides'); },
+      onBackground: () => { if (sheetOpen) closeSheet(); },
+      decor: s => J.decorView(s),
+      sheetOpen: () => sheetOpen && window.innerWidth < 900,
     });
   } catch (e) { P3 = null; }
   if (P3) mapEl.classList.add('three');
@@ -2271,7 +2236,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   }
 
   function drawDecor() {
-    const d = S.decor;
+    const d = J.decorView(S);
     // Lamp posts at path crossings
     const nl = Math.min(d.lamps, L.lampSpots.length);
     for (let k = 0; k < nl; k++) {
@@ -2331,7 +2296,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     if (S.park.food === 0 && S.time > 120) problems.push("I'm hungry!", 'Where are the snacks?');
     if (problems.length && rnd() < 0.75) return { text: pick(problems), bad: true };
     const happy = [`Best ${name} ever!`, 'Wheee!', 'Again! Again!', 'I love this park!', `The ${name} rocks!`, 'What a view!'];
-    if (S.decor.fountain || S.decor.flowers) happy.push('Such a pretty park!');
+    if (S.park.gardens) happy.push('Such a pretty park!');
     if (r && r.mgr) happy.push('The staff here are great!');
     return { text: pick(happy), bad: false };
   }
@@ -2677,7 +2642,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   let lastSnap = null;
   function btn(cls, act) {
     const b = document.createElement('button');
-    b.className = 'btn ' + cls;
+    b.className = ('btn ' + cls).trim();
     b.dataset.act = act;
     b.innerHTML = '<span class="t"></span><span class="c"></span>';
     return b;
@@ -2697,45 +2662,27 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   (function buildRideView() {
     const v = $('view-rides');
     v.innerHTML = `
-      <div class="panel" style="display:grid;gap:9px">
-        <div class="ridehead">
-          <button class="nav" data-nav="-1" aria-label="Previous ride">‹</button>
-          <div class="ricon" data-k="icon"></div>
-          <div style="min-width:0"><div class="rname" data-k="name"></div><div class="rsub" data-k="sub"></div></div>
-          <div class="lvl" data-k="lvl"></div>
-          <button class="nav" data-nav="1" aria-label="Next ride">›</button>
-        </div>
-        <div data-k="builtBox" style="display:grid;gap:9px">
-          <div class="stats">
-            <div class="stat"><div class="lab">Fun</div><div class="v" data-k="fun"></div></div>
-            <div class="stat"><div class="lab">Ticket</div><div class="v" data-k="price"></div></div>
-            <div class="stat"><div class="lab">Riders/min</div><div class="v" data-k="thr"></div></div>
-            <div class="stat"><div class="lab">Queue</div><div class="v" data-k="wait"></div></div>
-          </div>
-          <div class="loadrow"><div class="load"><i data-k="bar"></i></div><div class="note" data-k="ms"></div></div>
-        </div>
-        <div class="lotdesc" data-k="lotBox"></div>
-        <div class="btns" data-k="btns"></div>
+      <div class="ridehead">
+        <button class="nav" data-nav="-1" aria-label="Previous ride">‹</button>
+        <div class="ricon" data-k="icon"></div>
+        <div style="min-width:0"><div class="rname" data-k="name"></div><div class="rsub" data-k="sub"></div></div>
+        <div class="lvl" data-k="lvl"></div>
+        <button class="nav" data-nav="1" aria-label="Next ride">›</button>
       </div>
-      <div class="footrow">
-        <div class="seg" id="bulk" aria-label="Levels per upgrade"><button aria-pressed="true" data-n="1">×1</button><button aria-pressed="false" data-n="10">×10</button><button aria-pressed="false" data-n="25">×25</button><button aria-pressed="false" data-n="max">Max</button></div>
-        <button class="mgr" data-act="mgr" data-k="mgr"></button>
-      </div>`;
+      <div class="statline" data-k="line"></div>
+      <div class="lotdesc" data-k="lotBox"></div>
+      <div class="btns" data-k="btns"></div>`;
     v.querySelectorAll('[data-k]').forEach(n => { RV[n.dataset.k] = n; });
-    RV.up = btn('primary', 'level');
+    RV.fix = btn('danger full', 'fix');
+    RV.up = btn('primary half', 'level');
+    RV.max = btn('half', 'max');
     RV.seat = btn('', 'seat');
     RV.speed = btn('', 'speed');
-    RV.fix = btn('danger', 'fix');
-    RV.btns.append(RV.fix, RV.up, RV.seat, RV.speed);
+    RV.mgr = btn('', 'mgr');
+    RV.btns.append(RV.fix, RV.up, RV.max, RV.seat, RV.speed, RV.mgr);
     v.addEventListener('click', e => {
       const nav = e.target.closest('[data-nav]');
       if (nav) { sel = (sel + +nav.dataset.nav + S.rides.length) % S.rides.length; scrollToSel(); refresh(true); return; }
-      const bb = e.target.closest('#bulk button');
-      if (bb) {
-        bulk = bb.dataset.n === 'max' ? 'max' : +bb.dataset.n;
-        for (const x of bb.parentElement.children) x.setAttribute('aria-pressed', x === bb ? 'true' : 'false');
-        refresh(true); return;
-      }
       const b = e.target.closest('button[data-act]');
       if (!b) return;
       const i = sel;
@@ -2744,28 +2691,25 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       if (act === 'level' && !S.rides[i].lvl) {
         ok = J.buyLevels(S, i, 1);
         if (ok) { toast(`Construction started: ${J.rideDef(i).name} opens in ${J.duration(J.buildTime(S, 'ride', i) || 0)}`); say(`Builders are on the <b>${esc(J.rideDef(i).name)}</b>`, true); }
-        else if (!J.canBuild(S)) toast('All construction crews are busy. Hire more in the Park tab.');
+        else if (!J.canBuild(S)) toast('All construction crews are busy. Hire more in Park.');
       } else if (act === 'fix') {
         ok = J.repair(S, i);
         if (ok) { toast(`${J.rideDef(i).name} fixed!`); say(`Mechanics fixed the <b>${esc(J.rideDef(i).name)}</b>`, true); }
-      } else if (act === 'level') {
+      } else if (act === 'level' || act === 'max') {
         const before = J.milestonesPassed(S.rides[i].lvl);
-        ok = J.buyLevels(S, i, bulkCount(i));
+        ok = J.buyLevels(S, i, act === 'max' ? Math.max(1, J.maxLevels(S, i)) : 1);
         if (ok && J.milestonesPassed(S.rides[i].lvl) > before) toast(`${J.rideDef(i).name} reached Lv ${S.rides[i].lvl}: tickets ×2`);
       } else if (act === 'seat' || act === 'speed') {
         ok = act === 'seat' ? J.buySeats(S, i) : J.buySpeed(S, i);
         if (ok) toast(`Work started on the ${J.rideDef(i).name}: ${act === 'seat' ? 'more seats' : 'faster ride'}`);
-        else if (!J.canBuild(S) && !buildOf(i, act === 'seat' ? 'seats' : 'speed')) toast('All construction crews are busy. Hire more in the Park tab.');
-      }
-      else if (act === 'mgr') {
+        else if (!J.canBuild(S) && !buildOf(i, act === 'seat' ? 'seats' : 'speed')) toast('All construction crews are busy. Hire more in Park.');
+      } else if (act === 'mgr') {
         ok = J.buyManager(S, i);
         if (ok) toast(`${J.MANAGERS[S.rides[i].mgr - 1].name} hired for the ${J.rideDef(i).name}: ${J.MANAGERS[S.rides[i].mgr - 1].desc}`);
       }
       if (ok) refresh(true);
     });
   })();
-
-  function bulkCount(i) { return bulk === 'max' ? Math.max(1, J.maxLevels(S, i)) : bulk; }
 
   function renderRides(snap) {
     if (sel >= S.rides.length) sel = S.rides.length - 1;
@@ -2778,20 +2722,12 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       RV.icon.dataset.i = i; RV.icon.dataset.b = built;
     }
     text(RV.name, d.name);
-    RV.mgr.hidden = !built;
-    if (built) {
-      const mc = J.managerCost(S, i);
-      const t = J.MANAGERS[r.mgr];
-      html(RV.mgr, t ? `Hire ${t.name.toLowerCase()}<small>${t.desc} · ${J.money(mc)}</small>` : `${'★'.repeat(r.mgr)} Showrunner<small>Fully staffed</small>`);
-      RV.mgr.classList.toggle('can', !!t && S.cash >= mc);
-      RV.mgr.classList.toggle('max', !t);
-    }
-    RV.builtBox.hidden = !built;
-    RV.lotBox.hidden = built;
-    RV.seat.hidden = !built; RV.speed.hidden = !built;
     const broken = built && r.broken > 0;
     RV.fix.hidden = !broken;
-    RV.btns.style.gridTemplateColumns = built ? '' : '1fr';
+    for (const k of ['max', 'seat', 'speed', 'mgr']) RV[k].hidden = !built;
+    RV.up.classList.toggle('full', !built);
+    RV.line.hidden = !built;
+    RV.lotBox.hidden = built;
     const crewsFree = J.canBuild(S);
     if (!built) {
       text(RV.lvl, '');
@@ -2804,49 +2740,46 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
         setBtn(RV.up, 'Building…', J.duration(left) + ' left', false);
         return;
       }
-      text(RV.lotBox, `Adds ${J.fmt(d.fun0)} fun, which brings more guests. Tickets start at ${J.money(d.price0 * g.incomeMult)}. Construction takes ${J.duration(J.buildTime(S, 'ride', i))}.`);
+      text(RV.lotBox, `Brings ${J.fmt(d.fun0)} fun and more guests. Building takes ${J.duration(J.buildTime(S, 'ride', i))}.`);
       setBtn(RV.up, crewsFree ? (i === 0 ? 'Build your first ride' : 'Build ' + d.name) : 'All crews busy', J.money(cost), S.cash >= cost && crewsFree);
       return;
     }
     const st = snap.stats[i];
     if (broken) setBtn(RV.fix, '⚠ Broken down: repair now', `Fixes itself in ${J.duration(r.broken)}`, true);
     text(RV.lvl, 'Lv ' + r.lvl);
-    text(RV.sub, `${Math.round(d.seats * (1 + 0.5 * r.cap))} seats · ${(d.cycle * Math.pow(0.88, r.spd)).toFixed(1)} s ride${d.water ? ' · water' : ''}`);
-    text(RV.fun, J.fmt(st.fun));
-    text(RV.price, J.money(st.price));
-    text(RV.thr, J.fmt(st.throughput * 60));
-    const wait = r.wait || 0;
-    text(RV.wait, wait < 1 ? 'None' : J.duration(wait));
-    RV.wait.style.color = wait > g.tolerance ? 'var(--bad)' : wait > g.tolerance * 0.6 ? 'var(--warn)' : '';
-    const util = r.util || 0;
-    RV.bar.style.width = Math.min(100, util * 100) + '%';
-    RV.bar.className = util > 1.05 ? (wait > g.tolerance ? 'bad' : 'warn') : '';
-    html(RV.ms, broken ? 'Broken down. Guests in line are leaving.' : util > 1.05
-      ? `Too busy (${Math.round(util * 100)}% of capacity). Add seats or speed it up.`
-      : `Next milestone <b>Lv ${J.nextMilestone(r.lvl)}</b>: tickets ×2, fun ×1.5`);
-    const n = bulkCount(i);
-    const lc = J.levelCost(S, i, n);
-    setBtn(RV.up, 'Upgrade +' + n, J.money(lc), S.cash >= lc);
+    text(RV.sub, `${Math.round(d.seats * (1 + 0.5 * r.cap))} seats · ${(d.cycle * Math.pow(0.88, r.spd)).toFixed(1)} s ride`);
+    const wait = r.wait || 0, util = r.util || 0;
+    const warn = broken ? '<span class="bad">Guests in line are leaving</span>'
+      : wait > g.tolerance ? '<span class="bad">Line too long: add seats or speed</span>'
+      : util > 1.05 ? '<span class="warn">Very busy</span>' : '';
+    html(RV.line, `<span>Fun <b>${J.fmt(st.fun)}</b></span><span><b>${J.money(st.price)}</b> a ride</span><span>Queue <b>${wait < 1 ? 'none' : J.duration(wait)}</b></span>${warn}`);
+    const lc = J.levelCost(S, i, 1);
+    setBtn(RV.up, 'Upgrade +1', J.money(lc), S.cash >= lc);
+    const n = Math.max(1, J.maxLevels(S, i)), mc = J.levelCost(S, i, n);
+    setBtn(RV.max, n > 1 ? `Upgrade +${n}` : 'Upgrade max', J.money(mc), S.cash >= mc);
     const sc = J.seatCost(S, i), sb = buildOf(i, 'seats');
-    if (sb) setBtn(RV.seat, 'Adding seats', J.duration(timeLeft(sb)) + ' left', false);
-    else setBtn(RV.seat, '+ Seats · ' + J.duration(J.buildTime(S, 'seats', i)), crewsFree ? J.money(sc) : 'Crews busy', S.cash >= sc && crewsFree);
+    if (sb) setBtn(RV.seat, 'Seats', J.duration(timeLeft(sb)) + ' left', false);
+    else setBtn(RV.seat, '+ Seats', crewsFree ? J.money(sc) : 'Crews busy', S.cash >= sc && crewsFree);
     const pc = J.speedCost(S, i), pb = buildOf(i, 'speed');
     const maxed = r.spd >= J.MAX_SPEED;
-    if (pb) setBtn(RV.speed, 'Tuning up', J.duration(timeLeft(pb)) + ' left', false);
-    else setBtn(RV.speed, maxed ? 'Top speed' : 'Faster · ' + J.duration(J.buildTime(S, 'speed', i)), maxed ? 'Maxed' : crewsFree ? J.money(pc) : 'Crews busy', S.cash >= pc && crewsFree, maxed);
+    if (pb) setBtn(RV.speed, 'Speed', J.duration(timeLeft(pb)) + ' left', false);
+    else setBtn(RV.speed, maxed ? 'Top speed' : 'Faster', maxed ? 'Maxed' : crewsFree ? J.money(pc) : 'Crews busy', S.cash >= pc && crewsFree, maxed);
+    const t = J.MANAGERS[r.mgr], mgc = J.managerCost(S, i);
+    if (t) setBtn(RV.mgr, 'Hire ' + t.name.toLowerCase(), J.money(mgc), S.cash >= mgc);
+    else setBtn(RV.mgr, '★★★ Staff', 'Fully staffed', false, true);
+    RV.mgr.title = t ? t.desc : '';
   }
 
   // ---------- Dock: park ----------
-  const SHORT = { land: 'More land', food: 'Snack stands', mascot: 'Mascot parades', crew: 'Crew training', comfort: 'Shade & benches', night: 'Night security', mech: 'Mechanics', crews: 'Builder crews' };
+  const SHORT = { land: 'More land', food: 'Snack stands', gardens: 'Gardens & fountains', comfort: 'Shade & lamps', mascot: 'Mascots & statues', mech: 'Mechanics', crews: 'Builder crews' };
   function upgradeNow(id, s, g) {
     const l = s.park[id];
     switch (id) {
       case 'land': return `Room for ${J.fmt(g.capacity)} guests`;
       case 'food': return `${J.money(g.foodRate * (lastSnap ? lastSnap.avgPrice : 1) * 60)} per guest a minute`;
       case 'mascot': return `+${12 * l}% arrivals`;
-      case 'crew': return `+${10 * l}% riders on every ride`;
+      case 'gardens': return `+${6 * l}% fun on every ride`;
       case 'comfort': return `Guests queue ${g.tolerance} s happily`;
-      case 'night': { const o = J.offlineLimits(s); return `${Math.round(o.eff * 100)}% earnings, ${o.hours} h away`; }
       case 'mech': return `A ride breaks ~every ${J.duration(g.mtbf)}, fixed in ${J.duration(g.repair)}`;
       case 'crews': return `${g.crews} crew${g.crews > 1 ? 's' : ''}: ${g.crews} build${g.crews > 1 ? 's' : ''} at once`;
     }
@@ -2909,29 +2842,6 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     return '';
   }
   const perkTiles = {};
-  const decorTiles = {};
-  function decorNow(id) {
-    const n = S.decor[id];
-    switch (id) {
-      case 'flowers': return `${n} placed · +${3 * n}% fun`;
-      case 'lamps': return `${n} placed · +${5 * n} s patience`;
-      case 'fountain': return `${n} placed · +${8 * n}% fun`;
-      case 'statue': return `${n} placed · +${10 * n}% guests`;
-    }
-    return '';
-  }
-  function renderDecor() {
-    for (const d of J.DECOR) {
-      const c = decorTiles[d.id] || (decorTiles[d.id] = tileEl($('decorTiles'), d.id, d.name, d.desc, 'decor'));
-      const cost = J.decorCost(S, d.id);
-      setTile(c, 0, decorNow(d.id), J.money(cost), S.cash >= cost, false);
-    }
-  }
-  $('decorTiles').addEventListener('click', e => {
-    const b = e.target.closest('button[data-act]');
-    if (b && J.buyDecor(S, b.dataset.id)) refresh(true);
-  });
-
   function goalRows() {
     return S.goals.map(g => {
       const info = J.goalInfo(S, g);
@@ -2942,9 +2852,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     const rows = goalRows();
     if (!rows.length) return;
     const top = rows.reduce((a, b) => (b.frac > a.frac ? b : a));
-    text($('gLabel'), top.info.label);
-    $('gBar').style.width = Math.round(top.frac * 100) + '%';
-    text($('gCount'), `${S.goalsDone} done`);
+    $('goalbar').style.setProperty('--p', top.frac.toFixed(3));
+    $('goalbar').setAttribute('aria-label', 'Goals: ' + top.info.label);
     if (!$('goalModal').hidden) {
       html($('goalList'), rows.map(r => `<div class="goalrow"><div class="gl"><span>${esc(r.info.label)}</span><span>${Math.floor(r.frac * 100)}%</span></div><div class="gprog"><i style="width:${Math.round(r.frac * 100)}%"></i></div></div>`).join(''));
       const left = 5 - (S.goalsDone % 5);
@@ -3067,14 +2976,18 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     $('kVis').style.color = parkFull ? 'var(--bad)' : '';
     text($('parkNo'), 'Park ' + S.parkNumber);
     const sat = S.satisfaction;
-    text($('kMood'), sat > 0.85 ? 'Happy' : sat > 0.7 ? 'Content' : sat > 0.5 ? 'Restless' : 'Grumpy');
-    $('kMoodDot').className = 'dot' + (sat > 0.85 ? '' : sat > 0.5 ? ' warn' : ' bad');
+    text($('kMood'), sat > 0.85 ? '😄' : sat > 0.7 ? '🙂' : sat > 0.5 ? '😐' : '😠');
+    $('moodBtn').setAttribute('aria-label', 'Guest mood: ' + (sat > 0.85 ? 'happy' : sat > 0.7 ? 'content' : sat > 0.5 ? 'restless' : 'grumpy'));
+    const anyCan = J.PARK_UPGRADES.some(u => S.cash >= J.parkCost(S, u.id));
+    $('parkFab').classList.toggle('can', anyCan);
     if (!$('moodModal').hidden) renderMood();
     const chips = [];
     for (const e of S.effects) if (e.until > S.time && EFFECT_LABEL[e.type]) chips.push(`<span class="chip gold">${EFFECT_LABEL[e.type]} · ${Math.ceil(e.until - S.time)}s</span>`);
-    for (const b of S.builds.slice(0, 2)) {
+    if (S.builds.length) {
+      // only the next build to finish; the map labels show the rest
+      const b = S.builds.reduce((a, c) => (c.end < a.end ? c : a));
       const what = b.kind === 'ride' ? J.rideDef(b.i).name : b.kind === 'land' ? 'New land' : J.rideDef(b.i).name + (b.kind === 'seats' ? ' seats' : ' speed');
-      chips.push(`<span class="chip build">🏗 ${esc(what)} · ${J.duration(timeLeft(b))}</span>`);
+      chips.push(`<span class="chip build">🏗 ${esc(what)} · ${J.duration(timeLeft(b))}${S.builds.length > 1 ? ` · +${S.builds.length - 1}` : ''}</span>`);
     }
     if (parkFull) chips.push('<span class="chip bad">Park full: buy land</span>');
     if (!P3 && S.inPark > MAX_SPRITES) chips.push(`<span class="chip">1 dot ≈ ${J.fmt(S.inPark / MAX_SPRITES, 0)} guests</span>`);
@@ -3085,25 +2998,45 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     const pct = v => Math.round(v * 100) + '%';
     const col = v => v >= 0.95 ? 'var(--mint)' : v >= 0.8 ? 'var(--warn)' : 'var(--bad)';
     const rows = [
-      ['Queues', m.queues, m.queues >= 0.95 ? 'Lines are short. Nice.' : 'Some lines are too long. Add seats, speed rides up, or build shade & benches.'],
-      ['Space', m.crowd, m.crowd >= 0.95 ? 'Plenty of room.' : 'The park is packed. Buy more land in the Park tab.'],
+      ['Queues', m.queues, m.queues >= 0.95 ? 'Lines are short. Nice.' : 'Some lines are too long. Add seats, speed rides up, or buy shade & lamps.'],
+      ['Space', m.crowd, m.crowd >= 0.95 ? 'Plenty of room.' : 'The park is packed. Buy more land in Park.'],
       ['Entry price', m.price, m.price >= 0.95 ? 'Guests think the price is fine.' : 'Guests find the entry ticket too pricey.'],
-      ['Food', m.food, m.food >= 0.95 ? 'Nobody is hungry.' : 'Guests are hungry. Buy snack stands in the Park tab.'],
+      ['Food', m.food, m.food >= 0.95 ? 'Nobody is hungry.' : 'Guests are hungry. Buy snack stands in Park.'],
     ];
-    const bonus = m.decor > 1 ? `<div class="moodrow"><b>Decorations</b><span class="pct" style="color:var(--mint)">+${Math.round((m.decor - 1) * 100)}%</span><span class="small">Guests love the pretty park.</span></div>` : '';
+    const bonus = m.decor > 1 ? `<div class="moodrow"><b>Gardens</b><span class="pct" style="color:var(--mint)">+${Math.round((m.decor - 1) * 100)}%</span><span class="small">Guests love the pretty park.</span></div>` : '';
     html($('moodList'), rows.map(([n, v, h]) => `<div class="moodrow"><b>${n}</b><span class="pct" style="color:${col(v)}">${pct(v)}</span><span class="small">${h}</span></div>`).join('') + bonus);
   }
   $('moodBtn').addEventListener('click', () => { renderMood(); openModal('moodModal'); });
   $('moodClose').addEventListener('click', () => closeModal('moodModal'));
 
+  // The sheet opens on demand: a ride (tap it on the map), the park upgrades, or the menu.
+  let sheetOpen = false;
   function setTab(t) {
     tab = t;
-    for (const b of document.querySelectorAll('.tab')) b.setAttribute('aria-selected', b.dataset.tab === t ? 'true' : 'false');
-    for (const v of ['rides', 'park', 'decor', 'legacy', 'stats']) $('view-' + v).hidden = v !== t;
+    sheetOpen = true;
+    $('dock').hidden = false;
+    $('fabs').hidden = true;
+    for (const v of ['rides', 'park', 'legacy']) $('view-' + v).hidden = v !== t;
     if (t === 'rides') scrollToSel();
     refresh(true);
   }
-  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  function closeSheet() {
+    sheetOpen = false;
+    $('dock').hidden = true;
+    $('fabs').hidden = false;
+    $('sellConfirm').hidden = true;
+    tab = '';
+  }
+  document.querySelectorAll('.fab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  $('sheetClose').addEventListener('click', closeSheet);
+  $('cashBtn').addEventListener('click', () => setTab('legacy'));
+  // swipe the sheet down to close it
+  (function () {
+    let y0 = null;
+    const sh = document.querySelector('.sheet');
+    sh.addEventListener('touchstart', e => { y0 = sh.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+    sh.addEventListener('touchmove', e => { if (y0 !== null && e.touches[0].clientY - y0 > 70) { y0 = null; closeSheet(); } }, { passive: true });
+  })();
 
   let lastRefresh = 0;
   function refresh(force) {
@@ -3114,8 +3047,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     renderHud(snap);
     if (tab === 'rides') renderRides(snap);
     else if (tab === 'park') renderPark(snap);
-    else if (tab === 'stats') renderStats(snap);
-    else if (tab === 'decor') renderDecor();
+    else if (tab === 'legacy') renderStats(snap);
     renderGoals();
     renderLegacy();
     if (L && L.slots !== S.rides.length) layout();
@@ -3281,7 +3213,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     }
     // Start with the newest ride (or the empty lot) selected.
     sel = fresh ? 0 : Math.max(0, builtCount() - 1);
-    if (fresh) say('Welcome to your empty lot. Tap <b>Build your first ride</b> to begin.', true);
+    if (fresh) { say('Welcome to your empty lot. Tap <b>Build your first ride</b> to begin.', true); setTab('rides'); }
     else say(`Welcome back to <b>Park ${S.parkNumber}</b>.`, true);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitCache.clear());
     refresh(true);
