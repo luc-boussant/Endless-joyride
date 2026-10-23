@@ -83,10 +83,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .map { position: relative; min-height: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #183d33; }
 .mapscroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 canvas#park { display: block; width: 100%; }
+/* 3D park: the WebGL view fills the map; the old canvas becomes a label layer on top. Drag to move, pinch to zoom. */
+.map.three .mapscroll { overflow: hidden; }
+.map.three canvas#park { position: absolute; inset: 0; pointer-events: none; }
+canvas.gl { display: block; position: absolute; inset: 0; touch-action: none; }
 .chips { position: absolute; left: 8px; right: 8px; top: 8px; display: flex; flex-wrap: wrap; gap: 5px; pointer-events: none; }
 .chip { padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; background: rgba(18, 24, 52, .82); border: 1px solid var(--line); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .chip.gold { background: var(--gold); color: #2a1c00; border-color: transparent; }
 .chip.bad { background: var(--bad); color: #fff; border-color: transparent; }
+.chip.build { color: #bfe6ff; }
 .ticker { position: absolute; left: 8px; right: 8px; bottom: 8px; pointer-events: none; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
 .ticker div { max-width: 100%; padding: 3px 10px; border-radius: 10px; background: rgba(18, 24, 52, .8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
 .ticker div:first-child { color: var(--ink); }
@@ -117,7 +122,7 @@ canvas#park { display: block; width: 100%; }
 .loadrow { display: grid; gap: 4px; }
 .load { height: 6px; border-radius: 4px; background: var(--night); overflow: hidden; }
 .load i { display: block; height: 100%; width: 0; background: var(--mint); border-radius: 4px; transition: width .4s; }
-.load i.warn { background: var(--warn); } .load i.bad { background: var(--bad); }
+.load i.warn { background: var(--warn); } .load i.bad { background: var(--bad); } .load i.build { background: #6cc4ff; }
 .note { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .note b { color: var(--gold); }
 .btns { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 6px; }
@@ -132,6 +137,8 @@ canvas#park { display: block; width: 100%; }
 .btn.primary .c { color: #ffe3e9; }
 .btn.goldb { background: linear-gradient(var(--gold), #f5b52c); box-shadow: inset 0 -3px 0 var(--gold-deep); color: #2a1c00; }
 .btn.goldb .c { color: #5a3d00; }
+.btn.danger { background: linear-gradient(#ff6b5d, #e4433a); box-shadow: inset 0 -3px 0 #a3261f; color: #fff; grid-column: 1 / -1; }
+.btn.danger .c { color: #ffe0dc; }
 .btn.off { opacity: .5; }
 .btn.max { opacity: .5; }
 .footrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -313,13 +320,17 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     <h2>How to play</h2>
     <div class="small" style="font-size:13px;line-height:1.5;color:var(--ink)">
       Build rides on the lots and level them up. More fun brings more guests, and guests pay for every ride.<br>
+      Building takes real time: a few minutes for the first rides, hours and then days for the big ones. Each builder crew works on one thing at a time (new rides, seats, speed, land), and construction carries on while you are away.<br>
       Busy rides grow queues. Add seats or speed them up, or the crowd gets grumpy and stops coming.<br>
-      When the park is full, buy more land in the Park tab. Pop golden balloons for prizes.<br>
-      After $100 M in total earnings, sell your park for golden tickets: permanent bonuses for every park after.
+      Rides sometimes break down. Tap Repair, or wait for the mechanics. Hire more mechanics to make it rarer.<br>
+      Drag the park to look around, pinch to zoom and twist with two fingers to turn it. Tap a ride to manage it.<br>
+      After $1 T in total earnings, sell your park for golden tickets: permanent bonuses for every park after.
     </div>
     <div class="rowbtns"><button class="plain go" id="helpClose">Got it</button></div>
   </div>
 </div>
 
+<!--THREE-->
 <script>/*CORE*/</script>
+<script>/*SCENE*/</script>
 <script>/*UI*/</script>

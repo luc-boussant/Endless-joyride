@@ -7,14 +7,19 @@ const dir = __dirname;
 const read = f => fs.readFileSync(dir + '/src/' + f, 'utf8');
 let body = read('index.html')
   .replace('/*CORE*/', () => read('core.js'))
+  .replace('/*SCENE*/', () => read('scene3d.js'))
   .replace('/*UI*/', () => read('ui.js'));
 
 const version = crypto.createHash('sha1').update(body).digest('hex').slice(0, 10);
 body = body.replace('__VERSION__', new Date().toISOString().slice(0, 10) + ' · ' + version.slice(0, 6));
-fs.writeFileSync(dir + '/endless-joyland.html', body);
+// three.js: from the CDN on the Claude link, and a local copy in the app so it works offline.
+const THREE_CDN = '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>';
+fs.writeFileSync(dir + '/endless-joyland.html', body.replace('<!--THREE-->', THREE_CDN));
 const app = dir + '/app';
 fs.mkdirSync(app + '/icons', { recursive: true });
 for (const f of fs.readdirSync(dir + '/src/icons')) fs.copyFileSync(dir + '/src/icons/' + f, app + '/icons/' + f);
+fs.mkdirSync(app + '/vendor', { recursive: true });
+fs.copyFileSync(dir + '/src/vendor/three.min.js', app + '/vendor/three.min.js');
 
 const head = `<!doctype html>
 <html lang="en" class="pwa">
@@ -42,7 +47,7 @@ if ('serviceWorker' in navigator) {
   }).catch(() => {}));
 }
 </script>`;
-const page = head + body.replace('<div class="app">', '</head>\n<body>\n<div class="app">') + '\n' + swReg + '\n</body>\n</html>\n';
+const page = head + body.replace('<!--THREE-->', '<script src="vendor/three.min.js"></script>').replace('<div class="app">', '</head>\n<body>\n<div class="app">') + '\n' + swReg + '\n</body>\n</html>\n';
 fs.writeFileSync(app + '/index.html', page);
 
 fs.writeFileSync(app + '/manifest.webmanifest', JSON.stringify({
@@ -64,7 +69,7 @@ fs.writeFileSync(app + '/manifest.webmanifest', JSON.stringify({
 
 fs.writeFileSync(app + '/sw.js', `// Offline support: serve the game from the cache, refresh the cache in the background.
 const CACHE = 'joyland-${version}';
-const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
+const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'vendor/three.min.js', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));

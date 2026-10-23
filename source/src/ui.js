@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const J = window.Joyland;
-  const SAVE_KEY = 'endless-joyland-v1';
+  const SAVE_KEY = 'endless-joyland-v2'; // v2 (timed construction, 3D) started every park fresh
   const MAX_SPRITES = 150;
   const rnd = Math.random;
   const $ = id => document.getElementById(id);
@@ -76,6 +76,16 @@
   const canvas = $('park');
   const ctx = canvas.getContext('2d');
   let L = null;
+  // The 3D park (three.js). Without WebGL the flat map below is drawn instead.
+  let P3 = null;
+  try {
+    if (window.Park3D && window.Park3D.supported()) P3 = window.Park3D.create(scroller, {
+      def: i => J.rideDef(i),
+      hue: i => rideHue(i),
+      onSelect: i => { sel = i; setTab('rides'); },
+    });
+  } catch (e) { P3 = null; }
+  if (P3) mapEl.classList.add('three');
   let sprites = [];
   let popups = [];
   const rideAcc = [];
@@ -90,15 +100,17 @@
   function builtCount() { return S.rides.filter(r => r.lvl).length; }
 
   function layout() {
-    const W = scroller.clientWidth || 360;
-    const viewH = scroller.clientHeight || 400;
-    const cols = Math.max(3, Math.min(5, Math.floor(W / 140)));
-    const pad = 18, gap = 20, top = 40;
-    const plotW = (W - pad * 2 - gap * (cols - 1)) / cols;
-    const plotH = Math.min(plotW * 0.95, 150);
+    // In 3D the layout is a fixed-size world in map pixels (10 px = 1 unit); in 2D it fits the screen width.
+    const cols3 = (scroller.clientWidth || 360) >= 640 ? 4 : 3;
+    const W = P3 ? cols3 * 120 + (cols3 - 1) * 34 + 60 : (scroller.clientWidth || 360);
+    const viewH = P3 ? 0 : (scroller.clientHeight || 400);
+    const cols = P3 ? cols3 : Math.max(3, Math.min(5, Math.floor(W / 140)));
+    const pad = P3 ? 30 : 18, gap = P3 ? 34 : 20, top = P3 ? 34 : 40;
+    const plotW = P3 ? 120 : (W - pad * 2 - gap * (cols - 1)) / cols;
+    const plotH = P3 ? 120 : Math.min(plotW * 0.95, 150);
     const slots = S.rides.length;
     const rows = Math.max(2, Math.ceil(slots / cols));
-    const gateH = 84;
+    const gateH = P3 ? 110 : 84;
     const H = Math.max(viewH, Math.round(top + rows * (plotH + gap) + gateH));
     const plots = [];
     for (let i = 0; i < slots; i++) {
@@ -114,10 +126,12 @@
     const bottomY = hcorr[hcorr.length - 1];
     const gate = { x: W / 2, y: H - 30 };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
-      canvas.width = Math.round(W * dpr);
-      canvas.height = Math.round(H * dpr);
-      canvas.style.height = H + 'px';
+    // The canvas is the whole map in 2D, and a transparent label layer over the 3D view.
+    const cw = P3 ? scroller.clientWidth || 360 : W, ch = P3 ? scroller.clientHeight || 400 : H;
+    if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) {
+      canvas.width = Math.round(cw * dpr);
+      canvas.height = Math.round(ch * dpr);
+      canvas.style.height = ch + 'px';
     }
     // Decorative trees on the lawn below the rides, placed the same way every time.
     const trees = [];
@@ -139,8 +153,9 @@
       for (let x = 24; x < W - 20; x += 40) if (Math.abs(x - W / 2) > 78) spots.push([x + ((y / 34) % 2) * 12, y]);
     const lampSpots = [];
     for (const y of hcorr) for (const x of vcorr) lampSpots.push([x, y]);
-    L = { W, H, cols, pad, gap, top, plotW, plotH, rows, plots, vcorr, hcorr, gate, dpr, slots, bottomY, trees, viewH, spots, lampSpots };
+    L = { W, H, cols, pad, gap, top, plotW, plotH, rows, plots, vcorr, hcorr, gate, dpr, slots, bottomY, trees, viewH, spots, lampSpots, cw, ch };
     for (const sp of sprites) { sp.x = Math.min(sp.x, W); sp.y = Math.min(sp.y, H); }
+    if (P3) P3.setLayout(L);
   }
 
   function routeTo(sp, tx, ty) {
@@ -193,7 +208,7 @@
       if (sp.path.length) {
         const [tx, ty] = sp.path[0];
         const dx = tx - sp.x, dy = ty - sp.y, d = Math.hypot(dx, dy);
-        const stepLen = sp.speed * dt;
+        const stepLen = sp.speed * dt * (P3 ? 0.45 : 1);
         if (d <= stepLen) { sp.x = tx; sp.y = ty; sp.path.shift(); }
         else { sp.x += dx / d * stepLen; sp.y += dy / d * stepLen; }
         if (!sp.path.length) {
@@ -298,6 +313,7 @@
     const r = sp.ride !== undefined ? S.rides[sp.ride] : null;
     const name = sp.ride !== undefined ? J.rideDef(sp.ride).name : 'ride';
     const problems = [];
+    if (r && r.broken > 0) problems.push(`The ${name} broke down!`, 'Aww, it stopped working…', 'Fix the ride please!');
     if (r && g && (r.wait || 0) > g.tolerance) problems.push('This line is forever!', `The ${name} needs more seats`, 'Ugh, still waiting…');
     if (parkFull) problems.push('So crowded in here!');
     if (S.priceRatio > 0.95) problems.push('Entry was so pricey…');
@@ -316,7 +332,7 @@
     bubbleT = 0;
     const cands = sprites.filter(sp => sp.state === 'queue' && !bubbles.some(b => b.sp === sp));
     if (!cands.length) return;
-    const sp = pick(cands);
+    const sp = pick(cands.slice(0, 200));
     const th = thoughtFor(sp);
     bubbles.push({ sp, text: th.text, bad: th.bad, t: 0 });
   }
@@ -324,6 +340,7 @@
   let animT = 0;
   function draw(dt) {
     if (!L) return;
+    if (P3) return draw3d(dt);
     animT += dt;
     ctx.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
     const { W, H } = L;
@@ -492,10 +509,101 @@
     }
     ctx.globalAlpha = 1;
   }
+  // 3D view: render the scene, then draw names, timers, thoughts and money on the label layer above it.
+  function buildOf(i, kind) { return S.builds.find(b => b.i === i && (!kind || b.kind === kind)); }
+  function timeLeft(b) { return Math.max(0, (b.end - J.now()) / 1000); }
+  function pill(x, y, parts, opts) {
+    // parts: [[text, color], ...] laid out left to right inside one rounded label
+    ctx.font = '800 11px Figtree, -apple-system, system-ui, sans-serif';
+    let w = 16;
+    const ws = parts.map(p => ctx.measureText(p[0]).width);
+    w += ws.reduce((a, b) => a + b, 0) + (parts.length - 1) * 5;
+    const h = 18, x0 = Math.round(x - w / 2), y0 = Math.round(y - h);
+    ctx.fillStyle = opts && opts.bg || C.label;
+    roundRect(x0, y0, w, h, 9); ctx.fill();
+    if (opts && opts.ring) { ctx.strokeStyle = opts.ring; ctx.lineWidth = 1.5; roundRect(x0, y0, w, h, 9); ctx.stroke(); }
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    let cx = x0 + 8;
+    parts.forEach((p, k) => { ctx.fillStyle = p[1]; ctx.fillText(p[0], cx, y0 + h / 2 + 0.5); cx += ws[k] + 5; });
+    ctx.textBaseline = 'alphabetic';
+    return { x0, y0, w, h };
+  }
+  function draw3d(dt) {
+    animT += dt;
+    P3.frame(dt, S, { sel, showSel: tab === 'rides', sprites, reduceMotion, now: J.now() });
+    ctx.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
+    ctx.clearRect(0, 0, L.cw, L.ch);
+    const g = lastSnap ? lastSnap.g : null;
+    for (let i = 0; i < L.plots.length; i++) {
+      const p = L.plots[i], r = S.rides[i], def = J.rideDef(i);
+      const at = P3.toScreen(p.cx, p.y + p.h + 6, 0);
+      if (!at || at.x < -80 || at.x > L.cw + 80 || at.y < -20 || at.y > L.ch + 40) continue;
+      const rb = buildOf(i, 'ride');
+      const l0 = P3.toScreen(p.x, p.y + p.h + 6, 0), l1 = P3.toScreen(p.x + p.w, p.y + p.h + 6, 0);
+      const room = l0 && l1 ? Math.max(40, (l1.x - l0.x) * 1.15) : 160;
+      ctx.font = '800 11px Figtree, -apple-system, system-ui, sans-serif';
+      if (r && r.lvl) {
+        const extra = (r.mgr ? 12 * r.mgr + 5 : 0) + (r.broken > 0 ? 62 : buildOf(i) ? 70 : 0);
+        const parts = [[fitText(def.name, room - 30 - extra - ctx.measureText(String(r.lvl)).width), C.ink], [String(r.lvl), C.gold]];
+        if (r.mgr) parts.push(['★'.repeat(r.mgr), C.gold]);
+        const up = buildOf(i);
+        if (r.broken > 0) parts.push(['⚠ Broken', C.bad]);
+        else if (up) parts.push(['🔧 ' + J.duration(timeLeft(up)), '#9fd8ff']);
+        const box = pill(at.x, at.y, parts, { ring: i === sel && tab === 'rides' ? C.gold : r.broken > 0 ? C.bad : null });
+        if (g) {
+          const frac = Math.min(1, (r.wait || 0) / (g.tolerance * 3));
+          if (frac > 0.02) { ctx.fillStyle = (r.wait || 0) > g.tolerance ? C.bad : C.gold; roundRect(box.x0 + 6, box.y0 + box.h + 2, (box.w - 12) * frac, 3, 1.5); ctx.fill(); }
+        }
+        if (S.cash >= J.levelCost(S, i, 1)) {
+          const bx = box.x0 + box.w + 8, by = box.y0 + box.h / 2;
+          ctx.fillStyle = C.gold; ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#2a1c00'; ctx.beginPath(); ctx.moveTo(bx, by - 4); ctx.lineTo(bx + 3.5, by + 0.5); ctx.lineTo(bx + 1.3, by + 0.5); ctx.lineTo(bx + 1.3, by + 4); ctx.lineTo(bx - 1.3, by + 4); ctx.lineTo(bx - 1.3, by + 0.5); ctx.lineTo(bx - 3.5, by + 0.5); ctx.closePath(); ctx.fill();
+        }
+      } else if (rb) {
+        const left = timeLeft(rb), frac = 1 - left / Math.max(1, (rb.end - rb.start) / 1000);
+        const box = pill(at.x, at.y, [['🏗 ' + fitText(def.name, room - 90), C.ink], [J.duration(left), '#9fd8ff']], { ring: i === sel && tab === 'rides' ? C.gold : null });
+        ctx.fillStyle = 'rgba(255,255,255,.18)'; roundRect(box.x0 + 6, box.y0 + box.h + 2, box.w - 12, 4, 2); ctx.fill();
+        ctx.fillStyle = '#9fd8ff'; roundRect(box.x0 + 6, box.y0 + box.h + 2, (box.w - 12) * Math.max(0.03, frac), 4, 2); ctx.fill();
+      } else {
+        const cost = J.levelCost(S, i, 1), can = S.cash >= cost && J.canBuild(S);
+        pill(at.x, at.y, [['+ ' + fitText(def.name, room - 70), can ? C.gold : C.ink], [J.money(cost), can ? C.gold : C.muted]], { ring: i === sel && tab === 'rides' ? C.gold : can ? 'rgba(255,201,74,.5)' : null });
+      }
+    }
+    // Guest thoughts
+    ctx.font = '700 11px Figtree, -apple-system, system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    for (const b of bubbles) {
+      const a = Math.min(1, b.t * 4, (3.2 - b.t) * 2);
+      const at = P3.toScreen(b.sp.x, b.sp.y, 1.3);
+      if (a <= 0 || !at) continue;
+      const w = ctx.measureText(b.text).width + 14;
+      const x = Math.max(4, Math.min(L.cw - w - 4, at.x - w / 2)), y = at.y - 30;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#fff7e6';
+      roundRect(x, y, w, 19, 9.5); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(at.x - 4, y + 18); ctx.lineTo(at.x, y + 25); ctx.lineTo(at.x + 4, y + 18); ctx.fill();
+      ctx.fillStyle = b.bad ? '#b8243f' : '#1a2246';
+      ctx.textAlign = 'left';
+      ctx.fillText(b.text, x + 7, y + 10);
+    }
+    ctx.globalAlpha = 1;
+    // Money popups rise above the rides
+    ctx.font = '800 12px Figtree, -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    for (const p of popups) {
+      const at = P3.toScreen(p.x, p.y, 3 + p.t * 2);
+      if (!at) continue;
+      ctx.globalAlpha = Math.max(0, 1 - p.t / 1.4);
+      ctx.fillStyle = C.gold;
+      ctx.fillText(p.text, at.x, at.y);
+    }
+    ctx.globalAlpha = 1;
+  }
   const fitCache = new Map();
   function fitText(t, w) {
     const key = t + '|' + Math.round(w) + '|' + ctx.font;
     if (fitCache.has(key)) return fitCache.get(key);
+    if (fitCache.size > 600) fitCache.clear();
     let s = t;
     while (s.length > 3 && ctx.measureText(s).width > w) s = s.slice(0, -2) + '…';
     if (s !== t && !s.endsWith('…')) s += '…';
@@ -514,6 +622,7 @@
   });
   function scrollToSel() {
     if (!L || !L.plots[sel]) return;
+    if (P3) { P3.focus(sel); return; }
     const p = L.plots[sel];
     const top = scroller.scrollTop, h = scroller.clientHeight;
     if (p.y < top + 30 || p.y + p.h > top + h - 50) scroller.scrollTo({ top: Math.max(0, p.cy - h / 2), behavior: reduceMotion ? 'auto' : 'smooth' });
@@ -532,6 +641,7 @@
     b.addEventListener('click', () => {
       const r = J.popBalloon(S, rnd);
       if (r.kind === 'cash') { toast('Golden balloon! +' + J.money(r.amount)); say('<b>Golden balloon</b> popped: ' + J.money(r.amount) + ' inside', true); }
+      else if (r.kind === 'coffee') { toast('Golden balloon! Coffee for the crews: every build is 5 min closer'); say('<b>Coffee break</b>: builds jumped 5 minutes ahead', true); }
       else { toast('Golden balloon! Rush hour: arrivals ×3 for 30 s'); say('<b>Rush hour</b>: arrivals ×3 for 30 s', true); }
       removeBalloon();
     });
@@ -604,7 +714,8 @@
     RV.up = btn('primary', 'level');
     RV.seat = btn('', 'seat');
     RV.speed = btn('', 'speed');
-    RV.btns.append(RV.up, RV.seat, RV.speed);
+    RV.fix = btn('danger', 'fix');
+    RV.btns.append(RV.fix, RV.up, RV.seat, RV.speed);
     v.addEventListener('click', e => {
       const nav = e.target.closest('[data-nav]');
       if (nav) { sel = (sel + +nav.dataset.nav + S.rides.length) % S.rides.length; scrollToSel(); refresh(true); return; }
@@ -621,13 +732,20 @@
       const act = b.dataset.act;
       if (act === 'level' && !S.rides[i].lvl) {
         ok = J.buyLevels(S, i, 1);
-        if (ok) { toast(J.rideDef(i).name + ' is open!'); say(`<b>${esc(J.rideDef(i).name)}</b> opened its gates`, true); layout(); }
+        if (ok) { toast(`Construction started: ${J.rideDef(i).name} opens in ${J.duration(J.buildTime(S, 'ride', i) || 0)}`); say(`Builders are on the <b>${esc(J.rideDef(i).name)}</b>`, true); }
+        else if (!J.canBuild(S)) toast('All construction crews are busy. Hire more in the Park tab.');
+      } else if (act === 'fix') {
+        ok = J.repair(S, i);
+        if (ok) { toast(`${J.rideDef(i).name} fixed!`); say(`Mechanics fixed the <b>${esc(J.rideDef(i).name)}</b>`, true); }
       } else if (act === 'level') {
         const before = J.milestonesPassed(S.rides[i].lvl);
         ok = J.buyLevels(S, i, bulkCount(i));
         if (ok && J.milestonesPassed(S.rides[i].lvl) > before) toast(`${J.rideDef(i).name} reached Lv ${S.rides[i].lvl}: tickets ×2`);
-      } else if (act === 'seat') ok = J.buySeats(S, i);
-      else if (act === 'speed') ok = J.buySpeed(S, i);
+      } else if (act === 'seat' || act === 'speed') {
+        ok = act === 'seat' ? J.buySeats(S, i) : J.buySpeed(S, i);
+        if (ok) toast(`Work started on the ${J.rideDef(i).name}: ${act === 'seat' ? 'more seats' : 'faster ride'}`);
+        else if (!J.canBuild(S) && !buildOf(i, act === 'seat' ? 'seats' : 'speed')) toast('All construction crews are busy. Hire more in the Park tab.');
+      }
       else if (act === 'mgr') {
         ok = J.buyManager(S, i);
         if (ok) toast(`${J.MANAGERS[S.rides[i].mgr - 1].name} hired for the ${J.rideDef(i).name}: ${J.MANAGERS[S.rides[i].mgr - 1].desc}`);
@@ -660,16 +778,27 @@
     RV.builtBox.hidden = !built;
     RV.lotBox.hidden = built;
     RV.seat.hidden = !built; RV.speed.hidden = !built;
+    const broken = built && r.broken > 0;
+    RV.fix.hidden = !broken;
     RV.btns.style.gridTemplateColumns = built ? '' : '1fr';
+    const crewsFree = J.canBuild(S);
     if (!built) {
       text(RV.lvl, '');
       text(RV.sub, `${d.seats} seats · ${d.cycle} s ride${d.water ? ' · water ride' : ''}`);
-      text(RV.lotBox, `A new ride adds ${J.fmt(d.fun0)} fun, which brings more guests. Tickets start at ${J.money(d.price0 * g.incomeMult)}.`);
+      const b = buildOf(i, 'ride');
       const cost = J.levelCost(S, i, 1);
-      setBtn(RV.up, i === 0 ? 'Open your first ride' : 'Build ' + d.name, J.money(cost), S.cash >= cost);
+      if (b) {
+        const left = timeLeft(b), frac = 1 - left / Math.max(1, (b.end - b.start) / 1000);
+        html(RV.lotBox, `<b>Under construction.</b> Opens in ${J.duration(left)}.<div class="load" style="margin-top:6px"><i class="build" style="width:${Math.max(3, frac * 100).toFixed(1)}%"></i></div>`);
+        setBtn(RV.up, 'Building…', J.duration(left) + ' left', false);
+        return;
+      }
+      text(RV.lotBox, `Adds ${J.fmt(d.fun0)} fun, which brings more guests. Tickets start at ${J.money(d.price0 * g.incomeMult)}. Construction takes ${J.duration(J.buildTime(S, 'ride', i))}.`);
+      setBtn(RV.up, crewsFree ? (i === 0 ? 'Build your first ride' : 'Build ' + d.name) : 'All crews busy', J.money(cost), S.cash >= cost && crewsFree);
       return;
     }
     const st = snap.stats[i];
+    if (broken) setBtn(RV.fix, '⚠ Broken down: repair now', `Fixes itself in ${J.duration(r.broken)}`, true);
     text(RV.lvl, 'Lv ' + r.lvl);
     text(RV.sub, `${Math.round(d.seats * (1 + 0.5 * r.cap))} seats · ${(d.cycle * Math.pow(0.88, r.spd)).toFixed(1)} s ride${d.water ? ' · water' : ''}`);
     text(RV.fun, J.fmt(st.fun));
@@ -681,21 +810,23 @@
     const util = r.util || 0;
     RV.bar.style.width = Math.min(100, util * 100) + '%';
     RV.bar.className = util > 1.05 ? (wait > g.tolerance ? 'bad' : 'warn') : '';
-    html(RV.ms, util > 1.05
+    html(RV.ms, broken ? 'Broken down. Guests in line are leaving.' : util > 1.05
       ? `Too busy (${Math.round(util * 100)}% of capacity). Add seats or speed it up.`
       : `Next milestone <b>Lv ${J.nextMilestone(r.lvl)}</b>: tickets ×2, fun ×1.5`);
     const n = bulkCount(i);
     const lc = J.levelCost(S, i, n);
     setBtn(RV.up, 'Upgrade +' + n, J.money(lc), S.cash >= lc);
-    const sc = J.seatCost(S, i);
-    setBtn(RV.seat, '+ Seats', J.money(sc), S.cash >= sc);
-    const pc = J.speedCost(S, i);
+    const sc = J.seatCost(S, i), sb = buildOf(i, 'seats');
+    if (sb) setBtn(RV.seat, 'Adding seats', J.duration(timeLeft(sb)) + ' left', false);
+    else setBtn(RV.seat, '+ Seats · ' + J.duration(J.buildTime(S, 'seats', i)), crewsFree ? J.money(sc) : 'Crews busy', S.cash >= sc && crewsFree);
+    const pc = J.speedCost(S, i), pb = buildOf(i, 'speed');
     const maxed = r.spd >= J.MAX_SPEED;
-    setBtn(RV.speed, maxed ? 'Top speed' : 'Faster', maxed ? 'Maxed' : J.money(pc), S.cash >= pc, maxed);
+    if (pb) setBtn(RV.speed, 'Tuning up', J.duration(timeLeft(pb)) + ' left', false);
+    else setBtn(RV.speed, maxed ? 'Top speed' : 'Faster · ' + J.duration(J.buildTime(S, 'speed', i)), maxed ? 'Maxed' : crewsFree ? J.money(pc) : 'Crews busy', S.cash >= pc && crewsFree, maxed);
   }
 
   // ---------- Dock: park ----------
-  const SHORT = { land: 'More land', food: 'Snack stands', mascot: 'Mascot parades', crew: 'Crew training', comfort: 'Shade & benches', night: 'Night security' };
+  const SHORT = { land: 'More land', food: 'Snack stands', mascot: 'Mascot parades', crew: 'Crew training', comfort: 'Shade & benches', night: 'Night security', mech: 'Mechanics', crews: 'Builder crews' };
   function upgradeNow(id, s, g) {
     const l = s.park[id];
     switch (id) {
@@ -705,6 +836,8 @@
       case 'crew': return `+${10 * l}% riders on every ride`;
       case 'comfort': return `Guests queue ${g.tolerance} s happily`;
       case 'night': { const o = J.offlineLimits(s); return `${Math.round(o.eff * 100)}% earnings, ${o.hours} h away`; }
+      case 'mech': return `A ride breaks ~every ${J.duration(g.mtbf)}, fixed in ${J.duration(g.repair)}`;
+      case 'crews': return `${g.crews} crew${g.crews > 1 ? 's' : ''}: ${g.crews} build${g.crews > 1 ? 's' : ''} at once`;
     }
     return '';
   }
@@ -730,6 +863,13 @@
     for (const u of J.PARK_UPGRADES) {
       const c = parkTiles[u.id] || (parkTiles[u.id] = tileEl($('parkTiles'), u.id, SHORT[u.id], u.desc, 'park'));
       const cost = J.parkCost(S, u.id);
+      if (u.id === 'land') {
+        const lb = buildOf(undefined, 'land');
+        if (lb) { setTile(c, S.park.land, `Clearing new land: ${J.duration(timeLeft(lb))} left`, 'Building', false, false); continue; }
+        const free = J.canBuild(S);
+        setTile(c, S.park.land, upgradeNow('land', S, snap.g) + ` · takes ${J.duration(J.buildTime(S, 'land'))}`, free ? J.money(cost) : 'Crews busy', S.cash >= cost && free, !isFinite(cost));
+        continue;
+      }
       setTile(c, S.park[u.id], upgradeNow(u.id, S, snap.g), J.money(cost), S.cash >= cost, !isFinite(cost));
     }
     text($('priceVal'), J.money(snap.ticketPrice * snap.g.incomeMult));
@@ -740,7 +880,8 @@
   $('parkTiles').addEventListener('click', e => {
     const b = e.target.closest('button[data-act]');
     if (!b) return;
-    if (J.buyPark(S, b.dataset.id)) { if (b.dataset.id === 'land') toast('New land! Room for ' + J.fmt(J.globals(S).capacity) + ' guests.'); refresh(true); }
+    if (J.buyPark(S, b.dataset.id)) { if (b.dataset.id === 'land') toast('Builders are clearing new land.'); refresh(true); }
+    else if (b.dataset.id === 'land' && !J.canBuild(S) && !buildOf(undefined, 'land')) toast('All construction crews are busy.');
   });
   $('priceSlider').addEventListener('input', e => { S.priceRatio = +e.target.value / 100; refresh(true); });
 
@@ -752,6 +893,7 @@
       case 'fame': return `+${25 * l}% arrivals`;
       case 'thrift': return `Rides ${Math.round((1 - Math.pow(0.95, l)) * 100)}% cheaper`;
       case 'patience': return `+${20 * l} s queue patience`;
+      case 'builder': return `Builds ${Math.round((1 - Math.pow(0.9, l)) * 100)}% faster`;
     }
     return '';
   }
@@ -815,7 +957,7 @@
     const have = J.tickets(S), pend = J.pendingTickets(S);
     text($('tixHave'), J.fmt(have, 0));
     const nextTotal = J.ticketsTotalFor(S.lifetimeEarned) + 1;
-    const need = Math.max(0, Math.pow(nextTotal, 2) * 1e8 - S.lifetimeEarned);
+    const need = Math.max(0, Math.pow(nextTotal, 2) * J.TICKET_SCALE - S.lifetimeEarned);
     text($('tixInfo'), `+${J.fmt(3 * S.ticketsEarned, 0)}% income, +${J.fmt(S.ticketsEarned, 0)}% guests from ${J.fmt(S.ticketsEarned, 0)} earned. Next ticket in ${J.money(need)}.`);
     text($('sellC'), '+' + J.fmt(pend, 0) + ' tickets');
     $('sellBtn').classList.toggle('off', pend < 1);
@@ -835,7 +977,7 @@
   });
   $('sellBtn').addEventListener('click', () => {
     const pend = J.pendingTickets(S);
-    if (pend < 1) { toast('Your first golden ticket comes at $100 M total earnings.'); return; }
+    if (pend < 1) { toast('Your first golden ticket comes at ' + J.money(J.TICKET_SCALE) + ' total earnings.'); return; }
     text($('sellGain'), J.fmt(pend, 0) + (pend === 1 ? ' golden ticket' : ' golden tickets'));
     $('sellConfirm').hidden = false;
   });
@@ -855,6 +997,7 @@
     const rows = [
       ['Open for', J.duration(S.time)],
       ['Rides open', String(builtCount())],
+      ['Builder crews', `${J.busyCrews(S)} busy of ${J.globals(S).crews}`],
       ['Guests here', J.fmt(S.runVisitors, 0)],
       ['Guests ever', J.fmt(S.totalVisitors, 0)],
       ['Earned here', J.money(S.runEarned)],
@@ -918,8 +1061,12 @@
     if (!$('moodModal').hidden) renderMood();
     const chips = [];
     for (const e of S.effects) if (e.until > S.time && EFFECT_LABEL[e.type]) chips.push(`<span class="chip gold">${EFFECT_LABEL[e.type]} · ${Math.ceil(e.until - S.time)}s</span>`);
+    for (const b of S.builds.slice(0, 2)) {
+      const what = b.kind === 'ride' ? J.rideDef(b.i).name : b.kind === 'land' ? 'New land' : J.rideDef(b.i).name + (b.kind === 'seats' ? ' seats' : ' speed');
+      chips.push(`<span class="chip build">🏗 ${esc(what)} · ${J.duration(timeLeft(b))}</span>`);
+    }
     if (parkFull) chips.push('<span class="chip bad">Park full: buy land</span>');
-    if (S.inPark > MAX_SPRITES) chips.push(`<span class="chip">1 dot ≈ ${J.fmt(S.inPark / MAX_SPRITES, 0)} guests</span>`);
+    if (!P3 && S.inPark > MAX_SPRITES) chips.push(`<span class="chip">1 dot ≈ ${J.fmt(S.inPark / MAX_SPRITES, 0)} guests</span>`);
     html($('chips'), chips.join(''));
   }
   function renderMood() {
@@ -968,6 +1115,10 @@
   let arrivalAcc = 0, arrivalAccT = 0;
   function tick(dt) {
     const out = J.step(S, dt, rnd);
+    for (const i of out.broke) {
+      toast(`${J.rideDef(i).name} broke down! Tap Repair.`);
+      say(`<b>${esc(J.rideDef(i).name)}</b> broke down`, true);
+    }
     const snapNow = lastSnap || J.snapshot(S);
     if (snapNow.lambda < 4) {
       if (out.groups.length) {
@@ -1004,12 +1155,19 @@
       rideAccT = 0;
       for (let i = 0; i < rideAcc.length; i++) {
         const p = L.plots[i];
-        if (rideAcc[i] > 0 && p && popups.length < 30) popups.push({ x: p.cx + (rnd() - 0.5) * p.w * 0.4, y: p.y + p.h * 0.22, text: '+' + J.money(rideAcc[i]), t: 0 });
+        if (rideAcc[i] > 0 && p && popups.length < 30) popups.push({ x: p.cx + (rnd() - 0.5) * p.w * 0.4, y: P3 ? p.cy : p.y + p.h * 0.22, text: '+' + J.money(rideAcc[i]), t: 0 });
         rideAcc[i] = 0;
       }
     }
   }
 
+  function announceBuild(b) {
+    const name = b.i !== undefined ? J.rideDef(b.i).name : '';
+    if (b.kind === 'ride') { toast(`${name} is open!`); say(`<b>${esc(name)}</b> opened its gates`, true); if (sel === b.i) refresh(true); }
+    else if (b.kind === 'land') { toast('New land is ready! Room for ' + J.fmt(J.globals(S).capacity) + ' guests.'); say('<b>New land</b> opened', true); }
+    else toast(`${name}: ${b.kind === 'seats' ? 'new seats installed' : 'now runs faster'}`);
+    refresh(true);
+  }
   function frame(now) {
     let dt = (now - lastTick) / 1000;
     lastTick = now;
@@ -1019,6 +1177,7 @@
       dt = 0;
     }
     dt = Math.min(dt, 1);
+    for (const b of J.processBuilds(S)) announceBuild(b);
     if (dt > 0) {
       let left = dt;
       while (left > 0) { const h = Math.min(0.1, left); tick(h); left -= h; }
@@ -1049,7 +1208,9 @@
 
   function showWelcome(r) {
     const capped = r.seconds > r.counted + 1;
+    const done = (r.built || []).map(b => b.kind === 'ride' ? J.rideDef(b.i).name + ' opened' : b.kind === 'land' ? 'new land is ready' : J.rideDef(b.i).name + (b.kind === 'seats' ? ' got more seats' : ' got faster'));
     $('welcomeText').textContent = `You were away for ${J.duration(r.seconds)}. ${J.fmt(r.visitors, 0)} guests came by and your park earned ${J.money(r.earned)}.` +
+      (done.length ? ` While you were gone: ${done.join(', ')}.` : '') +
       (capped ? ` Offline earnings stop after ${r.hours} h; night security extends that.` : '');
     openModal('welcome');
   }
@@ -1073,7 +1234,7 @@
       const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
       const uid = db && user ? await user.id() : null;
       if (!uid) return;
-      const ref = db.doc('data/users/' + uid + '/save');
+      const ref = db.doc('data/users/' + uid + '/save2');
       const snap = await ref.get();
       if (snap.exists) {
         const d = snap.data();
@@ -1109,7 +1270,7 @@
     }
     // Start with the newest ride (or the empty lot) selected.
     sel = fresh ? 0 : Math.max(0, builtCount() - 1);
-    if (fresh) say('Welcome to your empty lot. Tap <b>Open your first ride</b> to begin.', true);
+    if (fresh) say('Welcome to your empty lot. Tap <b>Build your first ride</b> to begin.', true);
     else say(`Welcome back to <b>Park ${S.parkNumber}</b>.`, true);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitCache.clear());
     refresh(true);

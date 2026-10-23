@@ -1,6 +1,6 @@
 // Offline support: serve the game from the cache, refresh the cache in the background.
-const CACHE = 'joyland-4113d27b4b';
-const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
+const CACHE = 'joyland-c0c2225553';
+const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'vendor/three.min.js', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));

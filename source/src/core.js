@@ -10,45 +10,46 @@
   const SEAT_GROWTH = 1.32;
   const SPEED_GROWTH = 2.2;
   const MAX_SPEED = 12;
-  const TICKET_SCALE = 1e8;   // golden tickets = floor(sqrt(lifetime / TICKET_SCALE))
+  const TICKET_SCALE = 1e12;  // golden tickets = floor(sqrt(lifetime / TICKET_SCALE))
+  let clock = () => Date.now(); // wall clock for construction timers (tests swap it)
 
-  // [name, icon, seats, cycle seconds, water ride]
+  // [name, icon, seats, cycle seconds, water ride, 3D model]
   const HANDCRAFTED = [
-    ['Carousel', '🎠', 12, 8, 0],
-    ['Teacups', '☕', 16, 10, 0],
-    ['Bumper Cars', '🚗', 20, 12, 0],
-    ['Ferris Wheel', '🎡', 48, 20, 0],
-    ['Haunted House', '👻', 30, 15, 0],
-    ['Log Flume', '🛶', 24, 18, 1],
-    ['Pirate Ship', '⛵', 40, 16, 0],
-    ['Wooden Coaster', '🎢', 28, 24, 0],
-    ['Drop Tower', '🗼', 16, 12, 0],
-    ['River Rapids', '🌊', 32, 22, 1],
-    ['Hyper Coaster', '⚡', 36, 30, 0],
-    ['Space Launch', '🚀', 24, 26, 0],
+    ['Carousel', '🎠', 12, 8, 0, 'carousel'],
+    ['Teacups', '☕', 16, 10, 0, 'teacups'],
+    ['Bumper Cars', '🚗', 20, 12, 0, 'bumper'],
+    ['Ferris Wheel', '🎡', 48, 20, 0, 'wheel'],
+    ['Haunted House', '👻', 30, 15, 0, 'haunted'],
+    ['Log Flume', '🛶', 24, 18, 1, 'flume'],
+    ['Pirate Ship', '⛵', 40, 16, 0, 'pirate'],
+    ['Wooden Coaster', '🎢', 28, 24, 0, 'coaster'],
+    ['Drop Tower', '🗼', 16, 12, 0, 'drop'],
+    ['River Rapids', '🌊', 32, 22, 1, 'rapids'],
+    ['Hyper Coaster', '⚡', 36, 30, 0, 'hyper'],
+    ['Space Launch', '🚀', 24, 26, 0, 'rocket'],
   ];
   const PREFIX = ['Mega', 'Cosmic', 'Thunder', 'Twisted', 'Quantum', 'Midnight', 'Volcano', 'Galactic', 'Infinity', 'Crystal', 'Phantom', 'Aurora'];
   const KINDS = [
-    ['Coaster', '🎢', 30, 26, 0], ['Spinner', '🌀', 24, 14, 0], ['Drop', '🗼', 18, 12, 0], ['Splash', '🌊', 30, 20, 1],
-    ['Wheel', '🎡', 50, 22, 0], ['Dark Ride', '🏰', 28, 18, 0], ['Swing', '🪂', 32, 16, 0], ['Rocket', '🚀', 22, 24, 0],
+    ['Coaster', '🎢', 30, 26, 0, 'hyper'], ['Spinner', '🌀', 24, 14, 0, 'teacups'], ['Drop', '🗼', 18, 12, 0, 'drop'], ['Splash', '🌊', 30, 20, 1, 'flume'],
+    ['Wheel', '🎡', 50, 22, 0, 'wheel'], ['Dark Ride', '🏰', 28, 18, 0, 'haunted'], ['Swing', '🪂', 32, 16, 0, 'swing'], ['Rocket', '🚀', 22, 24, 0, 'rocket'],
   ];
   const ROMAN = ['', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X'];
 
   const defCache = [];
   function rideDef(i) {
     if (defCache[i]) return defCache[i];
-    let name, icon, seats, cycle, water;
+    let name, icon, seats, cycle, water, model;
     if (i < HANDCRAFTED.length) {
-      [name, icon, seats, cycle, water] = HANDCRAFTED[i];
+      [name, icon, seats, cycle, water, model] = HANDCRAFTED[i];
     } else {
       const j = i - HANDCRAFTED.length;
       const k = KINDS[(j * 3) % KINDS.length];
       const gen = Math.floor(j / PREFIX.length);
       name = PREFIX[j % PREFIX.length] + ' ' + k[0] + (gen < ROMAN.length ? ROMAN[gen] : ' #' + (gen + 1));
-      [, icon, seats, cycle, water] = k;
+      [, icon, seats, cycle, water, model] = k;
     }
     const d = {
-      i, name, icon, seats, cycle, water: !!water,
+      i, name, icon, seats, cycle, water: !!water, model,
       cost0: 12 * Math.pow(12, i),
       fun0: Math.pow(2.6, i),
       price0: Math.pow(3, i),
@@ -78,7 +79,9 @@
     { id: 'mascot', name: 'Mascot parades', desc: '+12% visitor arrivals', base: 400, growth: 1.9 },
     { id: 'crew', name: 'Ride crew training', desc: '+10% throughput on every ride', base: 500, growth: 1.85 },
     { id: 'comfort', name: 'Shade, benches & restrooms', desc: 'Visitors tolerate +15 s more queueing', base: 300, growth: 2.1, max: 20 },
-    { id: 'night', name: 'Night security', desc: '+1 h offline time and +2.5% offline earnings', base: 2000, growth: 3, max: 22 },
+    { id: 'night', name: 'Night security', desc: '+1 h offline time and +2% offline earnings', base: 2000, growth: 3, max: 22 },
+    { id: 'mech', name: 'Mechanics', desc: 'Rides break down less and get fixed faster', base: 350, growth: 2.3, max: 20 },
+    { id: 'crews', name: 'Construction crews', desc: 'Build one more thing at the same time', base: 5e4, growth: 100, max: 3 },
   ];
   const UPG = Object.fromEntries(PARK_UPGRADES.map(u => [u.id, u]));
 
@@ -88,6 +91,7 @@
     { id: 'fame', name: 'Famous name', desc: '+25% visitor arrivals', base: 5, growth: 1.8 },
     { id: 'thrift', name: 'Bulk contractors', desc: 'All ride upgrades cost 5% less', base: 8, growth: 2.2, max: 10 },
     { id: 'patience', name: 'Loyal fans', desc: 'Visitors tolerate +20 s more queueing', base: 6, growth: 2, max: 10 },
+    { id: 'builder', name: 'Master builders', desc: 'Construction is 10% faster', base: 4, growth: 2.2, max: 8 },
   ];
   const PERK = Object.fromEntries(PERKS.map(p => [p.id, p]));
 
@@ -107,7 +111,7 @@
   ];
   const DEC = Object.fromEntries(DECOR.map(d => [d.id, d]));
 
-  function newRide() { return { lvl: 0, cap: 0, spd: 0, queue: 0, mgr: 0 }; }
+  function newRide() { return { lvl: 0, cap: 0, spd: 0, queue: 0, mgr: 0, broken: 0 }; }
 
   function newState(keep) {
     const s = {
@@ -115,7 +119,8 @@
       cash: 15,
       time: 0,
       rides: [newRide()],
-      park: { land: 0, food: 0, mascot: 0, crew: 0, comfort: 0, night: 0 },
+      park: { land: 0, food: 0, mascot: 0, crew: 0, comfort: 0, night: 0, mech: 0, crews: 0 },
+      builds: [],          // {kind, i, start, end} in wall-clock ms
       priceRatio: 0.5,
       inPark: 0,
       satisfaction: 1,
@@ -123,7 +128,7 @@
       lifetimeEarned: 0,
       ticketsEarned: 0,     // tickets ever earned from selling parks
       ticketsSpent: 0,
-      perks: { seed: 0, fame: 0, thrift: 0, patience: 0 },
+      perks: { seed: 0, fame: 0, thrift: 0, patience: 0, builder: 0 },
       decor: { flowers: 0, lamps: 0, fountain: 0, statue: 0 },
       goals: [],
       goalsDone: 0,
@@ -159,6 +164,7 @@
     s.rate = Object.assign(newState().rate, raw.rate || {});
     s.decor = Object.assign(newState().decor, raw.decor || {});
     if (!Array.isArray(s.goals)) s.goals = [];
+    if (!Array.isArray(s.builds)) s.builds = [];
     if (!Array.isArray(s.rides) || !s.rides.length) s.rides = [newRide()];
     s.rides = s.rides.map(r => Object.assign(newRide(), r));
     if (!Array.isArray(s.effects)) s.effects = [];
@@ -181,6 +187,10 @@
       capacity: Math.floor(60 * Math.pow(1.6, s.park.land)),
       foodRate: 0.04 * (1 - Math.pow(0.93, s.park.food)),
       costMult: Math.pow(0.95, s.perks.thrift),
+      crews: 1 + s.park.crews,
+      buildMult: Math.pow(0.9, s.perks.builder),
+      mtbf: 3600 * (1 + 0.35 * s.park.mech),
+      repair: 150 / (1 + 0.4 * s.park.mech),
     };
   }
 
@@ -194,6 +204,7 @@
       fun: d.fun0 * r.lvl * Math.pow(1.5, m) * (heat ? 3 : 1) * g.decorFun * (r.mgr >= 3 ? 1.5 : 1),
       price: d.price0 * (1 + 0.15 * (r.lvl - 1)) * Math.pow(2, m) * g.incomeMult * (r.mgr >= 1 ? 2 : 1) * (r.mgr >= 3 ? 2 : 1),
       cycle: d.cycle * Math.pow(0.88, r.spd),
+      broken: r.broken > 0,
       throughput: d.thr0 * d.seats * (1 + 0.5 * r.cap) * (1 + 0.02 * (r.lvl - 1)) / (d.cycle * Math.pow(0.88, r.spd)) * g.crewMult * (r.mgr >= 2 ? 1.5 : 1),
     };
   }
@@ -259,20 +270,61 @@
 
   // ---------- Actions ----------
   function spend(s, c) { if (!(c <= s.cash)) return false; s.cash -= c; return true; }
-  function buyLevels(s, i, n) {
-    if (n <= 0) return false;
-    if (!spend(s, levelCost(s, i, n))) return false;
-    const r = s.rides[i];
-    const built = r.lvl === 0;
-    r.lvl += n;
-    if (built && i === s.rides.length - 1) s.rides.push(newRide());
+  // ---------- Construction ----------
+  // Building a ride, adding seats, speeding a ride up and buying land take real time and a free crew.
+  function buildTime(s, kind, i) {
+    const g = globals(s);
+    const r = i !== undefined ? s.rides[i] : null;
+    let t;
+    if (kind === 'ride') t = i <= 10 ? 60 * Math.pow(2.3, i) : 60 * Math.pow(2.3, 10) * Math.pow(1.25, i - 10);
+    else if (kind === 'seats') t = 25 * (1 + i) * Math.pow(1.35, r.cap);
+    else if (kind === 'speed') t = 60 * (1 + i) * Math.pow(1.5, r.spd);
+    else t = 120 * Math.pow(1.7, s.park.land);
+    return Math.round(t * g.buildMult);
+  }
+  function buildFor(s, kind, i) { return s.builds.find(b => b.kind === kind && b.i === i); }
+  function busyCrews(s) { return s.builds.length; }
+  function canBuild(s) { return s.builds.length < globals(s).crews; }
+  function startBuild(s, kind, i, cost) {
+    if (!canBuild(s) || buildFor(s, kind, i)) return false;
+    if (kind !== 'land' && kind !== 'ride' && !s.rides[i].lvl) return false;
+    if (!spend(s, cost)) return false;
+    const start = clock();
+    s.builds.push({ kind, i, start, end: start + buildTime(s, kind, i) * 1000 });
     return true;
   }
-  function buySeats(s, i) { if (!s.rides[i].lvl || !spend(s, seatCost(s, i))) return false; s.rides[i].cap++; return true; }
-  function buySpeed(s, i) { if (!s.rides[i].lvl || !spend(s, speedCost(s, i))) return false; s.rides[i].spd++; return true; }
+  function finishBuild(s, b) {
+    if (b.kind === 'ride') { s.rides[b.i].lvl = 1; if (b.i === s.rides.length - 1) s.rides.push(newRide()); }
+    else if (b.kind === 'seats') s.rides[b.i].cap++;
+    else if (b.kind === 'speed') s.rides[b.i].spd++;
+    else if (b.kind === 'land') s.park.land++;
+  }
+  // Applies every finished construction; returns them so the UI can celebrate.
+  function processBuilds(s) {
+    const now = clock(), done = [];
+    s.builds = s.builds.filter(b => { if (b.end <= now) { finishBuild(s, b); done.push(b); return false; } return true; });
+    return done;
+  }
+  // A goal or balloon can shave time off the oldest running construction.
+  function rushBuilds(s, seconds) { for (const b of s.builds) b.end -= seconds * 1000; }
+
+  function buyLevels(s, i, n) {
+    const r = s.rides[i];
+    if (!r.lvl) return startBuild(s, 'ride', i, levelCost(s, i, 1));
+    if (n <= 0) return false;
+    if (!spend(s, levelCost(s, i, n))) return false;
+    r.lvl += n;
+    return true;
+  }
+  function buySeats(s, i) { return startBuild(s, 'seats', i, seatCost(s, i)); }
+  function buySpeed(s, i) { return s.rides[i].spd < MAX_SPEED && startBuild(s, 'speed', i, speedCost(s, i)); }
+  function repair(s, i) { const r = s.rides[i]; if (!(r.broken > 0)) return false; r.broken = 0; return true; }
   function buyManager(s, i) { if (!s.rides[i].lvl || !spend(s, managerCost(s, i))) return false; s.rides[i].mgr++; return true; }
   function buyDecor(s, id) { if (!spend(s, decorCost(s, id))) return false; s.decor[id]++; return true; }
-  function buyPark(s, id) { if (!spend(s, parkCost(s, id))) return false; s.park[id]++; return true; }
+  function buyPark(s, id) {
+    if (id === 'land') return startBuild(s, 'land', undefined, parkCost(s, id));
+    if (!spend(s, parkCost(s, id))) return false; s.park[id]++; return true;
+  }
   function buyPerk(s, id) {
     const c = perkCost(s, id);
     if (!(c <= tickets(s))) return false;
@@ -353,7 +405,7 @@
   }
 
   function offlineLimits(s) {
-    return { hours: 2 + s.park.night, eff: 0.5 + 0.025 * s.park.night };
+    return { hours: 4 + s.park.night, eff: 0.5 + 0.02 * s.park.night };
   }
 
   // ---------- Simulation ----------
@@ -399,6 +451,13 @@
 
     // Rides: demand is shared by fun, queues fill when demand beats throughput.
     const demandTotal = s.inPark / RIDE_EVERY;
+    out.broke = [];
+    for (let i = 0; i < s.rides.length; i++) {
+      const r = s.rides[i];
+      if (!r.lvl) continue;
+      if (r.broken > 0) r.broken = Math.max(0, r.broken - dt);
+      else if (rnd && rnd() < dt / g.mtbf) { r.broken = g.repair; out.broke.push(i); }
+    }
     let rideMoney = 0, satNum = 0, satDen = 0;
     for (let i = 0; i < stats.length; i++) {
       const st = stats[i];
@@ -406,6 +465,12 @@
       if (!st) continue;
       const r = s.rides[i];
       const demand = snap.appeal ? demandTotal * st.fun / snap.appeal : 0;
+      if (r.broken > 0) {
+        // A broken ride sends its queue away disappointed.
+        r.queue = 0; r.wait = 0; r.util = 0;
+        satNum += demand * 0.4; satDen += demand;
+        continue;
+      }
       const maxQueue = st.throughput * g.tolerance * 3;
       let incoming = demand * dt;
       const space = Math.max(0, maxQueue - r.queue);
@@ -471,6 +536,8 @@
     const capped = Math.min(seconds, lim.hours * 3600);
     if (capped < 10) return null;
     const cash0 = s.cash, vis0 = s.totalVisitors;
+    const built = processBuilds(s);
+    for (const r of s.rides) r.broken = 0;
     const settle = Math.min(capped, 300);
     let t = 0, tail = 0, tailT = 0;
     while (t < settle) {
@@ -488,7 +555,7 @@
     s.time += rest;
     s.effects = [];
     s.nextEventAt = s.time + 60; s.nextBalloonAt = s.time + 30;
-    return { seconds, counted: capped, earned: s.cash - cash0, visitors: s.totalVisitors - vis0, eff: lim.eff, hours: lim.hours };
+    return { built, seconds, counted: capped, earned: s.cash - cash0, visitors: s.totalVisitors - vis0, eff: lim.eff, hours: lim.hours };
   }
 
   const EVENTS = [
@@ -517,6 +584,10 @@
 
   function popBalloon(s, rnd) {
     const inc = s.rate.rides + s.rate.gate + s.rate.food;
+    if (s.builds.length && rnd() < 0.25) {
+      rushBuilds(s, 300);
+      return { kind: 'coffee' };
+    }
     if (rnd() < 0.6) {
       const prize = Math.max(25, inc * 90, s.cash * 0.05);
       s.cash += prize; s.runEarned += prize; s.lifetimeEarned += prize;
@@ -549,7 +620,8 @@
   }
 
   root.Joyland = {
-    STAY, RIDE_EVERY, MAX_SPEED, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, DECOR,
+    STAY, RIDE_EVERY, MAX_SPEED, TICKET_SCALE, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, DECOR,
+    setClock: f => { clock = f; }, now: () => clock(), buildTime, buildFor, busyCrews, canBuild, processBuilds, rushBuilds, repair,
     managerCost, decorCost, buyManager, buyDecor, checkGoals, goalInfo,
     rideDef, milestonesPassed, nextMilestone, newState, migrate, globals, rideStats, snapshot, priceLabel,
     levelCost, maxLevels, seatCost, speedCost, parkCost, perkCost, seedCash,
