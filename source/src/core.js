@@ -74,7 +74,7 @@
 
   // ---------- Park-wide upgrades ----------
   const PARK_UPGRADES = [
-    { id: 'land', name: 'Buy more land', desc: 'Park capacity ×1.6', base: 250, growth: 3.2 },
+    { id: 'land', name: 'Buy more land', desc: 'Park capacity ×1.6', base: 600, growth: 5.2 },
     { id: 'food', name: 'Snack stands', desc: 'Visitors spend more on food and drinks between rides', base: 80, growth: 1.6 },
     { id: 'gardens', name: 'Gardens & fountains', desc: '+6% fun on every ride', base: 150, growth: 1.7 },
     { id: 'comfort', name: 'Shade & lamps', desc: 'Visitors queue 15 s longer happily', base: 300, growth: 2.1, max: 20 },
@@ -238,18 +238,23 @@
   function geoSum(c0, r, n) { return r === 1 ? c0 * n : c0 * (Math.pow(r, n) - 1) / (r - 1); }
   function geoMax(c0, r, cash) { return cash < c0 ? 0 : Math.floor(Math.log(cash * (r - 1) / c0 + 1) / Math.log(r)); }
 
+  // Building a ride costs much more than a level, so that saving up for construction matters as much as waiting for it.
+  // Tuned with the bot sim so a new ride costs roughly what the park earns in half its build time (a break's income).
+  const BUILD_MULT = [1, 4, 60, 100, 80, 25, 14, 14];
+  function buildCostMult(i) { return i < BUILD_MULT.length ? BUILD_MULT[i] : 14 / Math.pow(1.5, i - 7); }
   function levelCost(s, i, n) {
     const r = s.rides[i], d = rideDef(i), g = globals(s);
+    if (!r.lvl) return d.cost0 * buildCostMult(i) * g.costMult;
     return geoSum(d.cost0 * Math.pow(LEVEL_GROWTH, r.lvl) * g.costMult, LEVEL_GROWTH, n);
   }
   function maxLevels(s, i) {
     const r = s.rides[i], d = rideDef(i), g = globals(s);
     return geoMax(d.cost0 * Math.pow(LEVEL_GROWTH, r.lvl) * g.costMult, LEVEL_GROWTH, s.cash);
   }
-  function seatCost(s, i) { return rideDef(i).cost0 * 2 * Math.pow(SEAT_GROWTH, s.rides[i].cap) * globals(s).costMult; }
+  function seatCost(s, i) { return rideDef(i).cost0 * 12 * Math.pow(SEAT_GROWTH, s.rides[i].cap) * globals(s).costMult; }
   function speedCost(s, i) {
     const r = s.rides[i];
-    return r.spd >= MAX_SPEED ? Infinity : rideDef(i).cost0 * 10 * Math.pow(SPEED_GROWTH, r.spd) * globals(s).costMult;
+    return r.spd >= MAX_SPEED ? Infinity : rideDef(i).cost0 * 40 * Math.pow(SPEED_GROWTH, r.spd) * globals(s).costMult;
   }
   function managerCost(s, i) {
     const r = s.rides[i];
@@ -301,8 +306,19 @@
     s.builds = s.builds.filter(b => { if (b.end <= now) { finishBuild(s, b); done.push(b); return false; } return true; });
     return done;
   }
-  // A goal or balloon can shave time off the oldest running construction.
+  // A golden balloon can shave time off every running construction.
   function rushBuilds(s, seconds) { for (const b of s.builds) b.end -= seconds * 1000; }
+  // Paying overtime finishes a build now. It costs 3× what the park earns in the time saved, so waiting stays the cheap option.
+  function rushCost(s, b) {
+    const left = Math.max(0, (b.end - clock()) / 1000);
+    const inc = s.rate.rides + s.rate.gate + s.rate.food;
+    return Math.max(50, Math.ceil(left * Math.max(inc, 1) * 3));
+  }
+  function rushBuild(s, b) {
+    if (!s.builds.includes(b) || !spend(s, rushCost(s, b))) return false;
+    b.end = clock();
+    return true;
+  }
 
   function buyLevels(s, i, n) {
     const r = s.rides[i];
@@ -617,7 +633,7 @@
 
   root.Joyland = {
     STAY, RIDE_EVERY, MAX_SPEED, TICKET_SCALE, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, decorView,
-    setClock: f => { clock = f; }, now: () => clock(), buildTime, buildFor, busyCrews, canBuild, processBuilds, rushBuilds, repair,
+    setClock: f => { clock = f; }, now: () => clock(), buildTime, buildFor, busyCrews, canBuild, processBuilds, rushBuilds, rushCost, rushBuild, repair,
     managerCost, buyManager, checkGoals, goalInfo,
     rideDef, milestonesPassed, nextMilestone, newState, migrate, globals, rideStats, snapshot, priceLabel,
     levelCost, maxLevels, seatCost, speedCost, parkCost, perkCost, seedCash,

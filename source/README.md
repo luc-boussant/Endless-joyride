@@ -35,3 +35,8 @@ Ad-free amusement park idle game. Playable link: https://claude.ai/artifact/4BjG
 - Nothing else shows until asked: tap a ride for its sheet, the Park button for upgrades and entry price, the ☰ button for golden tickets, stats, save code and help. Tap empty ground or swipe down to close.
 - Park upgrades cut to 7: land, snacks, gardens & fountains (+6% fun), shade & lamps (patience), mascots & statues (+12% arrivals), mechanics, builder crews. Decor tab, crew training and night security are gone; decorations on the map follow the matching upgrades. Offline income: 12 h at 50%. Ride levels add 8% throughput each (replacing crew training).
 - Ride sheet: Upgrade +1 / Upgrade max, Seats, Faster, Hire staff. The ×1/×10/×25 selector is gone.
+
+## v2.2 money vs crews (2026-10-23, Luc: lots of cash, nothing to spend it on while crews work)
+- New rides cost a multiple of the level price (BUILD_MULT table in core.js, ×60–100 for rides 3–5, ×14 mid game, easing for late rides) so a ride costs about what the park earns in half its build time. Seats ×6 and speed ×4 pricier than before; land 600 × 5.2^level.
+- Overtime: any running build can be finished at once for 3× the income of the time saved (rushCost/rushBuild).
+- Bot sim (bot3.js prints, per day, how often crews vs money were the limit): money limits 0–60% of the time depending on the day; ride 12 opens around day 12.

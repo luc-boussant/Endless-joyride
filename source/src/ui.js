@@ -714,7 +714,13 @@
       const i = sel;
       let ok = false;
       const act = b.dataset.act;
-      if (act === 'level' && !S.rides[i].lvl) {
+      // a button on a running build pays overtime to finish it now
+      const running = act === 'level' && !S.rides[i].lvl ? buildOf(i, 'ride') : act === 'seat' ? buildOf(i, 'seats') : act === 'speed' ? buildOf(i, 'speed') : null;
+      if (running) {
+        ok = J.rushBuild(S, running);
+        if (ok) for (const d of J.processBuilds(S)) announceBuild(d);
+        else toast('Not enough cash to pay the overtime yet.');
+      } else if (act === 'level' && !S.rides[i].lvl) {
         ok = J.buyLevels(S, i, 1);
         if (ok) { toast(`Construction started: ${J.rideDef(i).name} opens in ${J.duration(J.buildTime(S, 'ride', i) || 0)}`); say(`Builders are on the <b>${esc(J.rideDef(i).name)}</b>`, true); }
         else if (!J.canBuild(S)) toast('All construction crews are busy. Hire more in Park.');
@@ -763,7 +769,8 @@
       if (b) {
         const left = timeLeft(b), frac = 1 - left / Math.max(1, (b.end - b.start) / 1000);
         html(RV.lotBox, `<b>Under construction.</b> Opens in ${J.duration(left)}.<div class="load" style="margin-top:6px"><i class="build" style="width:${Math.max(3, frac * 100).toFixed(1)}%"></i></div>`);
-        setBtn(RV.up, 'Building…', J.duration(left) + ' left', false);
+        const rc = J.rushCost(S, b);
+        setBtn(RV.up, `Finish now (${J.duration(left)} left)`, 'Overtime ' + J.money(rc), S.cash >= rc);
         return;
       }
       text(RV.lotBox, `Brings ${J.fmt(d.fun0)} fun and more guests. Building takes ${J.duration(J.buildTime(S, 'ride', i))}.`);
@@ -784,11 +791,11 @@
     const n = Math.max(1, J.maxLevels(S, i)), mc = J.levelCost(S, i, n);
     setBtn(RV.max, n > 1 ? `Upgrade +${n}` : 'Upgrade max', J.money(mc), S.cash >= mc);
     const sc = J.seatCost(S, i), sb = buildOf(i, 'seats');
-    if (sb) setBtn(RV.seat, 'Seats', J.duration(timeLeft(sb)) + ' left', false);
+    if (sb) setBtn(RV.seat, 'Seats ' + J.duration(timeLeft(sb)), 'Finish ' + J.money(J.rushCost(S, sb)), S.cash >= J.rushCost(S, sb));
     else setBtn(RV.seat, '+ Seats', crewsFree ? J.money(sc) : 'Crews busy', S.cash >= sc && crewsFree);
     const pc = J.speedCost(S, i), pb = buildOf(i, 'speed');
     const maxed = r.spd >= J.MAX_SPEED;
-    if (pb) setBtn(RV.speed, 'Speed', J.duration(timeLeft(pb)) + ' left', false);
+    if (pb) setBtn(RV.speed, 'Speed ' + J.duration(timeLeft(pb)), 'Finish ' + J.money(J.rushCost(S, pb)), S.cash >= J.rushCost(S, pb));
     else setBtn(RV.speed, maxed ? 'Top speed' : 'Faster', maxed ? 'Maxed' : crewsFree ? J.money(pc) : 'Crews busy', S.cash >= pc && crewsFree, maxed);
     const t = J.MANAGERS[r.mgr], mgc = J.managerCost(S, i);
     if (t) setBtn(RV.mgr, 'Hire ' + t.name.toLowerCase(), J.money(mgc), S.cash >= mgc);
@@ -835,7 +842,7 @@
       const cost = J.parkCost(S, u.id);
       if (u.id === 'land') {
         const lb = buildOf(undefined, 'land');
-        if (lb) { setTile(c, S.park.land, `Clearing new land: ${J.duration(timeLeft(lb))} left`, 'Building', false, false); continue; }
+        if (lb) { const rc = J.rushCost(S, lb); setTile(c, S.park.land, `Ready in ${J.duration(timeLeft(lb))} · tap to finish now`, J.money(rc), S.cash >= rc, false); continue; }
         const free = J.canBuild(S);
         setTile(c, S.park.land, upgradeNow('land', S, snap.g) + ` · takes ${J.duration(J.buildTime(S, 'land'))}`, free ? J.money(cost) : 'Crews busy', S.cash >= cost && free, !isFinite(cost));
         continue;
@@ -850,6 +857,8 @@
   $('parkTiles').addEventListener('click', e => {
     const b = e.target.closest('button[data-act]');
     if (!b) return;
+    const lb = b.dataset.id === 'land' && buildOf(undefined, 'land');
+    if (lb) { if (J.rushBuild(S, lb)) { for (const d of J.processBuilds(S)) announceBuild(d); } else toast('Not enough cash to pay the overtime yet.'); return; }
     if (J.buyPark(S, b.dataset.id)) { if (b.dataset.id === 'land') toast('Builders are clearing new land.'); refresh(true); }
     else if (b.dataset.id === 'land' && !J.canBuild(S) && !buildOf(undefined, 'land')) toast('All construction crews are busy.');
   });

@@ -250,7 +250,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
         <h3 class="sectionh"><span id="parkNo">Park 1</span> stats</h3>
         <div class="panel"><div class="statgrid" id="statGrid"></div></div>
         <div class="rowbtns"><button class="plain" id="saveOpen">Save code</button><button class="plain" id="helpOpen">How to play</button><button class="plain danger" id="resetOpen">Erase</button></div>
-        <div class="small" style="padding-inline:2px">Game version 2026-10-23 · 79d8d4</div>
+        <div class="small" style="padding-inline:2px">Game version 2026-10-23 · 03234e</div>
       </div>
     </div>
   </section>
@@ -298,7 +298,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     <h2>How to play</h2>
     <div class="small" style="font-size:13px;line-height:1.5;color:var(--ink)">
       Build rides on the lots and level them up. More fun brings more guests, and guests pay for every ride.<br>
-      Building takes real time: a few minutes for the first rides, hours and then days for the big ones. Each builder crew works on one thing at a time (new rides, seats, speed, land), and construction carries on while you are away.<br>
+      Building takes real time: a few minutes for the first rides, hours and then days for the big ones. Each builder crew works on one thing at a time (new rides, seats, speed, land), and construction carries on while you are away. In a hurry? Pay the crew overtime to finish a build now (it costs 3× what the park earns in the time saved).<br>
       Busy rides grow queues. Add seats or speed them up, or the crowd gets grumpy and stops coming.<br>
       Rides sometimes break down. Tap Repair, or wait for the mechanics. Hire more mechanics to make it rarer.<br>
       Drag the park to look around, pinch to zoom and twist with two fingers to turn it. Tap a ride to manage it.<br>
@@ -385,7 +385,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
 
   // ---------- Park-wide upgrades ----------
   const PARK_UPGRADES = [
-    { id: 'land', name: 'Buy more land', desc: 'Park capacity ×1.6', base: 250, growth: 3.2 },
+    { id: 'land', name: 'Buy more land', desc: 'Park capacity ×1.6', base: 600, growth: 5.2 },
     { id: 'food', name: 'Snack stands', desc: 'Visitors spend more on food and drinks between rides', base: 80, growth: 1.6 },
     { id: 'gardens', name: 'Gardens & fountains', desc: '+6% fun on every ride', base: 150, growth: 1.7 },
     { id: 'comfort', name: 'Shade & lamps', desc: 'Visitors queue 15 s longer happily', base: 300, growth: 2.1, max: 20 },
@@ -549,18 +549,23 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   function geoSum(c0, r, n) { return r === 1 ? c0 * n : c0 * (Math.pow(r, n) - 1) / (r - 1); }
   function geoMax(c0, r, cash) { return cash < c0 ? 0 : Math.floor(Math.log(cash * (r - 1) / c0 + 1) / Math.log(r)); }
 
+  // Building a ride costs much more than a level, so that saving up for construction matters as much as waiting for it.
+  // Tuned with the bot sim so a new ride costs roughly what the park earns in half its build time (a break's income).
+  const BUILD_MULT = [1, 4, 60, 100, 80, 25, 14, 14];
+  function buildCostMult(i) { return i < BUILD_MULT.length ? BUILD_MULT[i] : 14 / Math.pow(1.5, i - 7); }
   function levelCost(s, i, n) {
     const r = s.rides[i], d = rideDef(i), g = globals(s);
+    if (!r.lvl) return d.cost0 * buildCostMult(i) * g.costMult;
     return geoSum(d.cost0 * Math.pow(LEVEL_GROWTH, r.lvl) * g.costMult, LEVEL_GROWTH, n);
   }
   function maxLevels(s, i) {
     const r = s.rides[i], d = rideDef(i), g = globals(s);
     return geoMax(d.cost0 * Math.pow(LEVEL_GROWTH, r.lvl) * g.costMult, LEVEL_GROWTH, s.cash);
   }
-  function seatCost(s, i) { return rideDef(i).cost0 * 2 * Math.pow(SEAT_GROWTH, s.rides[i].cap) * globals(s).costMult; }
+  function seatCost(s, i) { return rideDef(i).cost0 * 12 * Math.pow(SEAT_GROWTH, s.rides[i].cap) * globals(s).costMult; }
   function speedCost(s, i) {
     const r = s.rides[i];
-    return r.spd >= MAX_SPEED ? Infinity : rideDef(i).cost0 * 10 * Math.pow(SPEED_GROWTH, r.spd) * globals(s).costMult;
+    return r.spd >= MAX_SPEED ? Infinity : rideDef(i).cost0 * 40 * Math.pow(SPEED_GROWTH, r.spd) * globals(s).costMult;
   }
   function managerCost(s, i) {
     const r = s.rides[i];
@@ -612,8 +617,19 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     s.builds = s.builds.filter(b => { if (b.end <= now) { finishBuild(s, b); done.push(b); return false; } return true; });
     return done;
   }
-  // A goal or balloon can shave time off the oldest running construction.
+  // A golden balloon can shave time off every running construction.
   function rushBuilds(s, seconds) { for (const b of s.builds) b.end -= seconds * 1000; }
+  // Paying overtime finishes a build now. It costs 3× what the park earns in the time saved, so waiting stays the cheap option.
+  function rushCost(s, b) {
+    const left = Math.max(0, (b.end - clock()) / 1000);
+    const inc = s.rate.rides + s.rate.gate + s.rate.food;
+    return Math.max(50, Math.ceil(left * Math.max(inc, 1) * 3));
+  }
+  function rushBuild(s, b) {
+    if (!s.builds.includes(b) || !spend(s, rushCost(s, b))) return false;
+    b.end = clock();
+    return true;
+  }
 
   function buyLevels(s, i, n) {
     const r = s.rides[i];
@@ -928,7 +944,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
 
   root.Joyland = {
     STAY, RIDE_EVERY, MAX_SPEED, TICKET_SCALE, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, decorView,
-    setClock: f => { clock = f; }, now: () => clock(), buildTime, buildFor, busyCrews, canBuild, processBuilds, rushBuilds, repair,
+    setClock: f => { clock = f; }, now: () => clock(), buildTime, buildFor, busyCrews, canBuild, processBuilds, rushBuilds, rushCost, rushBuild, repair,
     managerCost, buyManager, checkGoals, goalInfo,
     rideDef, milestonesPassed, nextMilestone, newState, migrate, globals, rideStats, snapshot, priceLabel,
     levelCost, maxLevels, seatCost, speedCost, parkCost, perkCost, seedCash,
@@ -2688,7 +2704,13 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       const i = sel;
       let ok = false;
       const act = b.dataset.act;
-      if (act === 'level' && !S.rides[i].lvl) {
+      // a button on a running build pays overtime to finish it now
+      const running = act === 'level' && !S.rides[i].lvl ? buildOf(i, 'ride') : act === 'seat' ? buildOf(i, 'seats') : act === 'speed' ? buildOf(i, 'speed') : null;
+      if (running) {
+        ok = J.rushBuild(S, running);
+        if (ok) for (const d of J.processBuilds(S)) announceBuild(d);
+        else toast('Not enough cash to pay the overtime yet.');
+      } else if (act === 'level' && !S.rides[i].lvl) {
         ok = J.buyLevels(S, i, 1);
         if (ok) { toast(`Construction started: ${J.rideDef(i).name} opens in ${J.duration(J.buildTime(S, 'ride', i) || 0)}`); say(`Builders are on the <b>${esc(J.rideDef(i).name)}</b>`, true); }
         else if (!J.canBuild(S)) toast('All construction crews are busy. Hire more in Park.');
@@ -2737,7 +2759,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       if (b) {
         const left = timeLeft(b), frac = 1 - left / Math.max(1, (b.end - b.start) / 1000);
         html(RV.lotBox, `<b>Under construction.</b> Opens in ${J.duration(left)}.<div class="load" style="margin-top:6px"><i class="build" style="width:${Math.max(3, frac * 100).toFixed(1)}%"></i></div>`);
-        setBtn(RV.up, 'Building…', J.duration(left) + ' left', false);
+        const rc = J.rushCost(S, b);
+        setBtn(RV.up, `Finish now (${J.duration(left)} left)`, 'Overtime ' + J.money(rc), S.cash >= rc);
         return;
       }
       text(RV.lotBox, `Brings ${J.fmt(d.fun0)} fun and more guests. Building takes ${J.duration(J.buildTime(S, 'ride', i))}.`);
@@ -2758,11 +2781,11 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     const n = Math.max(1, J.maxLevels(S, i)), mc = J.levelCost(S, i, n);
     setBtn(RV.max, n > 1 ? `Upgrade +${n}` : 'Upgrade max', J.money(mc), S.cash >= mc);
     const sc = J.seatCost(S, i), sb = buildOf(i, 'seats');
-    if (sb) setBtn(RV.seat, 'Seats', J.duration(timeLeft(sb)) + ' left', false);
+    if (sb) setBtn(RV.seat, 'Seats ' + J.duration(timeLeft(sb)), 'Finish ' + J.money(J.rushCost(S, sb)), S.cash >= J.rushCost(S, sb));
     else setBtn(RV.seat, '+ Seats', crewsFree ? J.money(sc) : 'Crews busy', S.cash >= sc && crewsFree);
     const pc = J.speedCost(S, i), pb = buildOf(i, 'speed');
     const maxed = r.spd >= J.MAX_SPEED;
-    if (pb) setBtn(RV.speed, 'Speed', J.duration(timeLeft(pb)) + ' left', false);
+    if (pb) setBtn(RV.speed, 'Speed ' + J.duration(timeLeft(pb)), 'Finish ' + J.money(J.rushCost(S, pb)), S.cash >= J.rushCost(S, pb));
     else setBtn(RV.speed, maxed ? 'Top speed' : 'Faster', maxed ? 'Maxed' : crewsFree ? J.money(pc) : 'Crews busy', S.cash >= pc && crewsFree, maxed);
     const t = J.MANAGERS[r.mgr], mgc = J.managerCost(S, i);
     if (t) setBtn(RV.mgr, 'Hire ' + t.name.toLowerCase(), J.money(mgc), S.cash >= mgc);
@@ -2809,7 +2832,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       const cost = J.parkCost(S, u.id);
       if (u.id === 'land') {
         const lb = buildOf(undefined, 'land');
-        if (lb) { setTile(c, S.park.land, `Clearing new land: ${J.duration(timeLeft(lb))} left`, 'Building', false, false); continue; }
+        if (lb) { const rc = J.rushCost(S, lb); setTile(c, S.park.land, `Ready in ${J.duration(timeLeft(lb))} · tap to finish now`, J.money(rc), S.cash >= rc, false); continue; }
         const free = J.canBuild(S);
         setTile(c, S.park.land, upgradeNow('land', S, snap.g) + ` · takes ${J.duration(J.buildTime(S, 'land'))}`, free ? J.money(cost) : 'Crews busy', S.cash >= cost && free, !isFinite(cost));
         continue;
@@ -2824,6 +2847,8 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   $('parkTiles').addEventListener('click', e => {
     const b = e.target.closest('button[data-act]');
     if (!b) return;
+    const lb = b.dataset.id === 'land' && buildOf(undefined, 'land');
+    if (lb) { if (J.rushBuild(S, lb)) { for (const d of J.processBuilds(S)) announceBuild(d); } else toast('Not enough cash to pay the overtime yet.'); return; }
     if (J.buyPark(S, b.dataset.id)) { if (b.dataset.id === 'land') toast('Builders are clearing new land.'); refresh(true); }
     else if (b.dataset.id === 'land' && !J.canBuild(S) && !buildOf(undefined, 'land')) toast('All construction crews are busy.');
   });
