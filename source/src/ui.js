@@ -630,6 +630,171 @@
     if (p.y < top + 30 || p.y + p.h > top + h - 50) scroller.scrollTo({ top: Math.max(0, p.cy - h / 2), behavior: reduceMotion ? 'auto' : 'smooth' });
   }
 
+  // ---------- Sound (synthesised with Web Audio, no files) ----------
+  const SOUND_KEY = 'endless-joyland-sound';
+  const Sound = (function () {
+    let ac = null, master = null, on = true, noiseBuf = null;
+    try { on = localStorage.getItem(SOUND_KEY) !== 'off'; } catch (e) { /* default on */ }
+    function ctx() {
+      if (!ac) {
+        const A = window.AudioContext || window.webkitAudioContext;
+        if (!A) return null;
+        try { ac = new A(); } catch (e) { return null; }
+        master = ac.createGain(); master.gain.value = 0.5; master.connect(ac.destination);
+      }
+      if (ac.state === 'suspended') ac.resume().catch(() => {});
+      return ac;
+    }
+    function tone(f, t0, dur, type, vol, f2) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(f, t0);
+      if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol || 0.2, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(master);
+      o.start(t0); o.stop(t0 + dur + 0.03);
+    }
+    function noise(t0, dur, vol, freq) {
+      if (!noiseBuf) { noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate); const d = noiseBuf.getChannelData(0); for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1; }
+      const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+      src.buffer = noiseBuf; f.type = 'bandpass'; f.frequency.value = freq || 1800; f.Q.value = 0.8;
+      g.gain.setValueAtTime(vol || 0.3, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f); f.connect(g); g.connect(master); src.start(t0); src.stop(t0 + dur + 0.02);
+    }
+    const arp = (t, notes, step, dur, type, vol) => notes.forEach((f, k) => tone(f, t + k * step, dur, type, vol));
+    const SFX = {
+      tap: (t, p) => { tone(380 + p * 500, t, 0.09, 'triangle', 0.18, 520 + p * 700); noise(t, 0.04, 0.08, 3000); },
+      coin: t => { tone(988, t, 0.07, 'square', 0.05); tone(1319, t + 0.06, 0.22, 'square', 0.05); },
+      level: t => arp(t, [523, 659, 784], 0.05, 0.16, 'triangle', 0.16),
+      milestone: t => { arp(t, [523, 659, 784, 1047, 1319], 0.06, 0.22, 'triangle', 0.17); tone(1047, t + 0.3, 0.5, 'sine', 0.08); },
+      open: t => { arp(t, [392, 523, 659, 784], 0.11, 0.25, 'square', 0.07); [523, 659, 784, 1047].forEach(f => tone(f, t + 0.46, 0.9, 'triangle', 0.1)); noise(t + 0.46, 0.6, 0.12, 5000); },
+      goal: t => { tone(784, t, 0.18, 'sine', 0.2); tone(1175, t + 0.1, 0.4, 'sine', 0.18); },
+      done: t => { tone(659, t, 0.12, 'triangle', 0.15); tone(988, t + 0.08, 0.28, 'triangle', 0.15); },
+      pop: t => { noise(t, 0.12, 0.45, 2200); tone(500, t, 0.18, 'sine', 0.15, 1400); arp(t + 0.1, [1047, 1319, 1568], 0.05, 0.15, 'triangle', 0.1); },
+      trophy: t => { arp(t, [659, 831, 988, 1319], 0.08, 0.3, 'triangle', 0.15); tone(1319, t + 0.32, 0.8, 'sine', 0.1); noise(t + 0.3, 0.5, 0.08, 6000); },
+      breakdown: t => { tone(220, t, 0.35, 'sawtooth', 0.08, 70); noise(t, 0.25, 0.15, 400); },
+      parade: t => { const m = [523, 523, 659, 784, 659, 784, 1047]; m.forEach((f, k) => tone(f, t + k * 0.12, 0.16, 'square', 0.07)); [262, 330, 392].forEach(f => tone(f, t + 0.84, 0.9, 'triangle', 0.12)); noise(t + 0.84, 0.7, 0.15, 5000); },
+      gift: t => { arp(t, [784, 988, 1175, 1568, 1976], 0.07, 0.25, 'sine', 0.14); },
+      event: t => { tone(880, t, 0.15, 'sine', 0.12); tone(1320, t + 0.12, 0.3, 'sine', 0.1); },
+    };
+    return {
+      get on() { return on; },
+      set(v) { on = v; try { localStorage.setItem(SOUND_KEY, v ? 'on' : 'off'); } catch (e) { /* ignore */ } if (v) ctx(); },
+      unlock() { if (on) ctx(); },
+      play(name, arg) {
+        if (!on || document.hidden) return;
+        const c = ctx();
+        if (!c || !SFX[name]) return;
+        try { SFX[name](c.currentTime + 0.01, arg || 0); } catch (e) { /* audio glitch: stay silent */ }
+      },
+    };
+  })();
+  // iOS only lets audio start from a touch, so wake the audio on the first one.
+  let touched = false; // browsers refuse vibration before the first touch
+  document.addEventListener('pointerdown', () => { touched = true; Sound.unlock(); }, { once: true, capture: true });
+  document.addEventListener('touchend', () => Sound.unlock(), { once: true, capture: true });
+
+  // A light tap on the phone: vibrate where supported; on iPhone, toggling a hidden switch gives a haptic tick.
+  let hapticEl = null;
+  function buzz(ms) {
+    try {
+      if (!touched) return;
+      if (navigator.vibrate) { navigator.vibrate(ms || 10); return; }
+      if (!hapticEl) {
+        hapticEl = document.createElement('label');
+        hapticEl.style.cssText = 'position:fixed;left:-100px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+        hapticEl.setAttribute('aria-hidden', 'true');
+        const inp = document.createElement('input'); inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1;
+        hapticEl.appendChild(inp); document.body.appendChild(hapticEl);
+      }
+      hapticEl.click();
+    } catch (e) { /* no haptics */ }
+  }
+
+  // ---------- Effects layer: confetti, floating numbers, banners ----------
+  const fxCanvas = $('fx'), fx = fxCanvas.getContext('2d');
+  const CONFETTI = ['#ffc94a', '#ff4d6d', '#4fb3ff', '#3fd9a2', '#ffffff', '#a98bff', '#ff9a3c'];
+  let parts = [], floaters = [], fxW = 0, fxH = 0, fxDpr = 1;
+  function fxResize() {
+    fxDpr = Math.min(window.devicePixelRatio || 1, 2);
+    fxW = window.innerWidth; fxH = window.innerHeight;
+    fxCanvas.width = Math.round(fxW * fxDpr); fxCanvas.height = Math.round(fxH * fxDpr);
+  }
+  fxResize();
+  window.addEventListener('resize', fxResize);
+  function confetti(x, y, n, power) {
+    if (reduceMotion) n = Math.min(n, 8);
+    power = power || 260;
+    for (let k = 0; k < n && parts.length < 500; k++) {
+      const a = -Math.PI / 2 + (rnd() - 0.5) * 2.2, v = power * (0.4 + rnd() * 0.8);
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1.4 + rnd() * 1.2, t: 0, c: pick(CONFETTI), w: 4 + rnd() * 4, h: 2 + rnd() * 3, r: rnd() * 6, vr: (rnd() - 0.5) * 14 });
+    }
+  }
+  function confettiRain(n) {
+    if (reduceMotion) n = Math.min(n, 10);
+    for (let k = 0; k < n && parts.length < 500; k++)
+      parts.push({ x: rnd() * fxW, y: -10 - rnd() * fxH * 0.4, vx: (rnd() - 0.5) * 60, vy: 60 + rnd() * 120, life: 4 + rnd() * 2, t: 0, c: pick(CONFETTI), w: 5 + rnd() * 4, h: 3 + rnd() * 3, r: rnd() * 6, vr: (rnd() - 0.5) * 10, rain: true });
+  }
+  function floatText(x, y, text, color, size) {
+    if (floaters.length > 40) floaters.shift();
+    floaters.push({ x, y, text, color: color || '#ffc94a', size: size || 15, t: 0 });
+  }
+  function drawFx(dt) {
+    fx.setTransform(fxDpr, 0, 0, fxDpr, 0, 0);
+    fx.clearRect(0, 0, fxW, fxH);
+    if (!parts.length && !floaters.length) return;
+    for (const p of parts) {
+      p.t += dt;
+      if (p.rain) { p.vy = Math.min(p.vy + 40 * dt, 180); p.vx += Math.sin(p.t * 3 + p.r) * 30 * dt; }
+      else { p.vy += 520 * dt; p.vx *= Math.pow(0.4, dt); }
+      p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
+      const a = Math.max(0, Math.min(1, (p.life - p.t) * 2));
+      fx.globalAlpha = a;
+      fx.save(); fx.translate(p.x, p.y); fx.rotate(p.r); fx.scale(1, Math.abs(Math.cos(p.t * 6 + p.r)) * 0.8 + 0.2);
+      fx.fillStyle = p.c; fx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); fx.restore();
+    }
+    parts = parts.filter(p => p.t < p.life && p.y < fxH + 20);
+    fx.textAlign = 'center'; fx.textBaseline = 'middle';
+    for (const f of floaters) {
+      f.t += dt;
+      const a = Math.max(0, Math.min(1, (1.2 - f.t) * 2.5));
+      const s = f.t < 0.12 ? 0.6 + f.t / 0.12 * 0.5 : 1.1 - Math.min(0.1, (f.t - 0.12));
+      fx.globalAlpha = a;
+      fx.font = `800 ${Math.round(f.size * s)}px Figtree, -apple-system, system-ui, sans-serif`;
+      fx.lineWidth = 3.5; fx.strokeStyle = 'rgba(10,12,30,.85)';
+      const y = f.y - f.t * 46;
+      fx.strokeText(f.text, f.x, y); fx.fillStyle = f.color; fx.fillText(f.text, f.x, y);
+    }
+    floaters = floaters.filter(f => f.t < 1.2);
+    fx.globalAlpha = 1;
+  }
+  // Big centred announcement; a new one replaces the last.
+  function banner(icon, title, sub) {
+    const box = $('banners');
+    box.innerHTML = '';
+    const el = document.createElement('div');
+    el.className = 'banner';
+    el.innerHTML = `<div class="bi">${icon}</div><div class="bt">${esc(title)}</div>${sub ? `<div class="bs">${esc(sub)}</div>` : ''}`;
+    box.appendChild(el);
+    setTimeout(() => el.remove(), 2900);
+  }
+  function bumpCash() {
+    const el = $('kCash');
+    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+  }
+  function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+  // Where a ride is on screen (for bursts over it); falls back to the middle of the screen.
+  function rideScreen(i) {
+    if (L && L.plots[i]) {
+      const p = L.plots[i];
+      if (P3) { const at = P3.toScreen(p.cx, p.cy, P3.lotTop(i) * 0.8); if (at && at.x > 0 && at.x < fxW && at.y > 0 && at.y < fxH) return at; }
+      else { const y = p.cy - scroller.scrollTop; if (y > 0 && y < fxH) return { x: p.cx, y }; }
+    }
+    return { x: fxW / 2, y: fxH * 0.35 };
+  }
+
   // ---------- Golden balloon ----------
   let balloon = null;
   function spawnBalloon() {
@@ -641,7 +806,11 @@
     balloon = { el: b, x: 20 + rnd() * Math.max(10, w - 90), h, t: 0, life: 13 };
     b.style.left = balloon.x + 'px'; b.style.top = h + 'px';
     b.addEventListener('click', () => {
+      const at = centerOf(b);
       const r = J.popBalloon(S, rnd);
+      Sound.play('pop'); buzz(15);
+      confetti(at.x, at.y, 40, 300);
+      if (r.kind === 'cash') { floatText(at.x, at.y - 20, '+' + J.money(r.amount), '#ffc94a', 20); bumpCash(); }
       if (r.kind === 'cash') { toast('Golden balloon! +' + J.money(r.amount)); say('<b>Golden balloon</b> popped: ' + J.money(r.amount) + ' inside', true); }
       else if (r.kind === 'coffee') { toast('Golden balloon! Coffee for the crews: every build is 5 min closer'); say('<b>Coffee break</b>: builds jumped 5 minutes ahead', true); }
       else { toast('Golden balloon! Rush hour: arrivals ×3 for 30 s'); say('<b>Rush hour</b>: arrivals ×3 for 30 s', true); }
@@ -718,25 +887,33 @@
       const running = act === 'level' && !S.rides[i].lvl ? buildOf(i, 'ride') : act === 'seat' ? buildOf(i, 'seats') : act === 'speed' ? buildOf(i, 'speed') : null;
       if (running) {
         ok = J.rushBuild(S, running);
-        if (ok) for (const d of J.processBuilds(S)) announceBuild(d);
+        if (ok) { Sound.play('coin'); for (const d of J.processBuilds(S)) announceBuild(d); }
         else toast('Not enough cash to pay the overtime yet.');
       } else if (act === 'level' && !S.rides[i].lvl) {
         ok = J.buyLevels(S, i, 1);
-        if (ok) { toast(`Construction started: ${J.rideDef(i).name} opens in ${J.duration(J.buildTime(S, 'ride', i) || 0)}`); say(`Builders are on the <b>${esc(J.rideDef(i).name)}</b>`, true); }
+        if (ok) { Sound.play('coin'); buzz(); toast(`Construction started: ${J.rideDef(i).name} opens in ${J.duration(J.buildTime(S, 'ride', i) || 0)}`); say(`Builders are on the <b>${esc(J.rideDef(i).name)}</b>`, true); }
         else if (!J.canBuild(S)) toast('All construction crews are busy. Hire more in Park.');
       } else if (act === 'fix') {
         ok = J.repair(S, i);
-        if (ok) { toast(`${J.rideDef(i).name} fixed!`); say(`Mechanics fixed the <b>${esc(J.rideDef(i).name)}</b>`, true); }
+        if (ok) { Sound.play('done'); toast(`${J.rideDef(i).name} fixed!`); say(`Mechanics fixed the <b>${esc(J.rideDef(i).name)}</b>`, true); }
       } else if (act === 'level' || act === 'max') {
         const before = J.milestonesPassed(S.rides[i].lvl);
         ok = J.buyLevels(S, i, act === 'max' ? Math.max(1, J.maxLevels(S, i)) : 1);
-        if (ok && J.milestonesPassed(S.rides[i].lvl) > before) toast(`${J.rideDef(i).name} reached Lv ${S.rides[i].lvl}: tickets ×2`);
+        if (ok) {
+          const at = rideScreen(i), big = J.milestonesPassed(S.rides[i].lvl) > before;
+          Sound.play(big ? 'milestone' : 'level'); buzz(big ? 25 : 8);
+          confetti(at.x, at.y, big ? 70 : 14, big ? 340 : 200);
+          floatText(at.x, at.y - 10, 'Lv ' + S.rides[i].lvl, big ? '#ffffff' : '#ffc94a', big ? 22 : 16);
+          if (big) toast(`${J.rideDef(i).name} reached Lv ${S.rides[i].lvl}: tickets ×2`);
+        }
       } else if (act === 'seat' || act === 'speed') {
         ok = act === 'seat' ? J.buySeats(S, i) : J.buySpeed(S, i);
+        if (ok) Sound.play('coin');
         if (ok) toast(`Work started on the ${J.rideDef(i).name}: ${act === 'seat' ? 'more seats' : 'faster ride'}`);
         else if (!J.canBuild(S) && !buildOf(i, act === 'seat' ? 'seats' : 'speed')) toast('All construction crews are busy. Hire more in Park.');
       } else if (act === 'mgr') {
         ok = J.buyManager(S, i);
+        if (ok) { const at = rideScreen(i); Sound.play('milestone'); buzz(20); confetti(at.x, at.y, 40, 300); floatText(at.x, at.y - 10, '★'.repeat(S.rides[i].mgr), '#ffc94a', 22); }
         if (ok) toast(`${J.MANAGERS[S.rides[i].mgr - 1].name} hired for the ${J.rideDef(i).name}: ${J.MANAGERS[S.rides[i].mgr - 1].desc}`);
       }
       if (ok) refresh(true);
@@ -858,8 +1035,8 @@
     const b = e.target.closest('button[data-act]');
     if (!b) return;
     const lb = b.dataset.id === 'land' && buildOf(undefined, 'land');
-    if (lb) { if (J.rushBuild(S, lb)) { for (const d of J.processBuilds(S)) announceBuild(d); } else toast('Not enough cash to pay the overtime yet.'); return; }
-    if (J.buyPark(S, b.dataset.id)) { if (b.dataset.id === 'land') toast('Builders are clearing new land.'); refresh(true); }
+    if (lb) { if (J.rushBuild(S, lb)) { Sound.play('coin'); for (const d of J.processBuilds(S)) announceBuild(d); } else toast('Not enough cash to pay the overtime yet.'); return; }
+    if (J.buyPark(S, b.dataset.id)) { Sound.play('coin'); buzz(); const at = centerOf(b); confetti(at.x, at.y, 10, 180); if (b.dataset.id === 'land') toast('Builders are clearing new land.'); refresh(true); }
     else if (b.dataset.id === 'land' && !J.canBuild(S) && !buildOf(undefined, 'land')) toast('All construction crews are busy.');
   });
   $('priceSlider').addEventListener('input', e => { S.priceRatio = +e.target.value / 100; refresh(true); });
@@ -905,11 +1082,28 @@
     for (const d of J.checkGoals(S, rnd)) {
       toast(`Goal done: ${d.label}. +${J.money(d.prize)}` + (d.boost ? ' and ×2 income for 5 min!' : ''));
       say(`<b>Goal done</b>: ${esc(d.label)} (+${J.money(d.prize)})`, true);
+      const at = centerOf($('goalbar'));
+      Sound.play('goal'); buzz(12); bumpCash();
+      confetti(at.x, at.y + 10, 30, 240);
+      floatText(at.x - 30, at.y + 40, '+' + J.money(d.prize), '#ffc94a', 17);
+      if (d.boost) { banner('⚡', 'Income ×2', '5 goals done: double income for 5 minutes'); Sound.play('milestone'); }
     }
+    const got = J.checkTrophies(S);
+    if (got.length) {
+      setTimeout(() => {
+        Sound.play('trophy'); buzz(30); confettiRain(got.length > 1 ? 120 : 70);
+        if (got.length === 1) banner(got[0].icon, 'Trophy: ' + got[0].name, `${got[0].desc} · +${Math.round(J.TROPHY_BONUS * 100)}% income forever`);
+        else banner('🏆', got.length + ' trophies!', `+${Math.round(J.TROPHY_BONUS * 100 * got.length)}% income forever. See them in the menu.`);
+      }, 600);
+      refresh(true);
+    }
+    updateGift();
   }
 
   function renderLegacy() {
     const have = J.tickets(S), pend = J.pendingTickets(S);
+    text($('trophyCount'), `Trophies ${S.trophies.length} / ${J.TROPHIES.length}`);
+    text($('trophySub'), `+${Math.round(S.trophies.length * J.TROPHY_BONUS * 100)}% income in every park. Tap to see them all.`);
     text($('tixHave'), J.fmt(have, 0));
     const nextTotal = J.ticketsTotalFor(S.lifetimeEarned) + 1;
     const need = Math.max(0, Math.pow(nextTotal, 2) * J.TICKET_SCALE - S.lifetimeEarned);
@@ -928,7 +1122,7 @@
   }
   $('perkTiles').addEventListener('click', e => {
     const b = e.target.closest('button[data-act]');
-    if (b && J.buyPerk(S, b.dataset.id)) refresh(true);
+    if (b && J.buyPerk(S, b.dataset.id)) { Sound.play('milestone'); const at = centerOf(b); confetti(at.x, at.y, 30, 260); refresh(true); }
   });
   $('sellBtn').addEventListener('click', () => {
     const pend = J.pendingTickets(S);
@@ -943,6 +1137,8 @@
     if (!r) return;
     replaceState(r.state);
     toast(`Sold for ${J.fmt(r.gain, 0)} golden tickets. Welcome to Park ${S.parkNumber}!`);
+    banner('🎟️', 'Park ' + S.parkNumber, `+${J.fmt(r.gain, 0)} golden tickets. Build it bigger!`);
+    Sound.play('trophy'); confettiRain(140);
     say(`<b>Park ${S.parkNumber}</b> is an empty lot. Time to build.`, true);
     setTab('rides');
   });
@@ -1000,8 +1196,87 @@
     layout(); save(); refresh(true);
   }
 
+  // ---------- Megaphone: tap to hype the crowd, a full ring starts a parade ----------
+  const hypeBtn = $('hypeBtn');
+  let hypeHitT = 0, paradeRainT = 0;
+  hypeBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (!builtCount()) { toast('Open your first ride, then hype the crowd.'); return; }
+    const r = J.tapHype(S);
+    const at = centerOf(hypeBtn);
+    Sound.play('tap', S.hype);
+    buzz(6);
+    floatText(at.x + (rnd() - 0.5) * 30, at.y - 40, '+' + J.money(r.cash), '#ffc94a', 15);
+    hypeBtn.classList.add('hit'); hypeHitT = 0.08;
+    if (r.parade) {
+      Sound.play('parade'); buzz(40);
+      banner('🎉', 'Parade!', `Income ×${J.PARADE_MULT} for ${J.PARADE_SECONDS} seconds`);
+      confettiRain(90);
+      confetti(at.x, at.y, 50, 360);
+      say('<b>Parade!</b> The whole park is dancing', true);
+    }
+    refresh(true);
+  });
+  hypeBtn.addEventListener('click', e => e.preventDefault());
+  function renderHype(dt) {
+    if (hypeHitT > 0 && (hypeHitT -= dt) <= 0) hypeBtn.classList.remove('hit');
+    const parade = S.effects.find(e => e.type === 'parade' && e.until > S.time);
+    hypeBtn.classList.toggle('parade', !!parade);
+    const p = parade ? (parade.until - S.time) / J.PARADE_SECONDS : (S.hype || 0);
+    const ps = p.toFixed(3);
+    if (hypeBtn.dataset.p !== ps) { hypeBtn.style.setProperty('--p', ps); hypeBtn.dataset.p = ps; }
+    const tm = $('hypeTm');
+    tm.hidden = !parade;
+    if (parade) text(tm, Math.ceil(parade.until - S.time) + ' s');
+    if (parade && (paradeRainT += dt) > 0.5) { paradeRainT = 0; confettiRain(6); }
+    $('hypeHint').hidden = sheetOpen || !builtCount() || S.counts.taps >= 12;
+  }
+
+  // ---------- Trophies ----------
+  function renderTrophies() {
+    const n = S.trophies.length;
+    text($('trophyIntro'), `${n} of ${J.TROPHIES.length} won. Each one adds ${Math.round(J.TROPHY_BONUS * 100)}% income to every park you will ever run: now +${Math.round(n * J.TROPHY_BONUS * 100)}%.`);
+    const rows = J.TROPHIES.map(t => ({ t, info: J.trophyInfo(S, t) }))
+      .sort((a, b) => (b.info.done - a.info.done) || (b.info.value / b.info.target - a.info.value / a.info.target));
+    html($('trophyList'), rows.map(({ t, info }) => {
+      const frac = info.done ? 1 : info.value / info.target;
+      const v = info.done ? '✓ Won' : t.target >= 1000 ? Math.floor(frac * 100) + '%' : `${J.fmt(info.value, 0)} / ${J.fmt(t.target, 0)}`;
+      return `<div class="trow ${info.done ? 'done' : 'locked'}"><span class="ti">${t.icon}</span><b>${esc(t.name)}</b><span class="tv">${v}</span><span class="small" style="grid-column:2/-1">${esc(t.desc)}</span>${info.done ? '' : `<div class="gprog"><i style="width:${(frac * 100).toFixed(1)}%"></i></div>`}</div>`;
+    }).join(''));
+  }
+  $('trophyOpen').addEventListener('click', () => { renderTrophies(); openModal('trophyModal'); });
+  $('trophyClose').addEventListener('click', () => closeModal('trophyModal'));
+
+  // ---------- Daily gift ----------
+  function dayKey(t) { const d = new Date(t); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function today() { return dayKey(Date.now()); }
+  function yesterday() { return dayKey(Date.now() - 864e5); }
+  function updateGift() { $('giftBtn').hidden = !J.dailyReady(S, today()); }
+  $('giftBtn').addEventListener('click', () => {
+    if (!J.dailyReady(S, today())) return updateGift();
+    const streak = J.nextStreak(S, yesterday());
+    text($('giftText'), (streak > 1 ? `Day ${streak} in a row! ` : 'Welcome! ') + `Inside: ${J.money(J.dailyPrize(S, streak))} and double income for 10 minutes. Come back tomorrow for a bigger gift.`);
+    html($('giftStreak'), [1, 2, 3, 4, 5, 6, 7].map(d => `<div class="${d === Math.min(streak, 7) ? 'now' : d < Math.min(streak, 7) ? 'on' : ''}">Day ${d}</div>`).join(''));
+    openModal('giftModal');
+  });
+  $('giftLater').addEventListener('click', () => closeModal('giftModal'));
+  $('giftOpen').addEventListener('click', () => {
+    const r = J.claimDaily(S, today(), yesterday());
+    closeModal('giftModal');
+    updateGift();
+    if (!r) return;
+    Sound.play('gift'); buzz(30); bumpCash(); confettiRain(110);
+    banner('🎁', '+' + J.money(r.prize), `Day ${r.streak} gift · income ×2 for 10 min`);
+    save(); refresh(true);
+  });
+
+  // ---------- Sound switch ----------
+  function renderSoundBtn() { text($('soundBtn'), Sound.on ? 'Sound: on' : 'Sound: off'); }
+  $('soundBtn').addEventListener('click', () => { Sound.set(!Sound.on); renderSoundBtn(); if (Sound.on) Sound.play('coin'); });
+  renderSoundBtn();
+
   // ---------- HUD and tabs ----------
-  const EFFECT_LABEL = { sunny: 'Sunny ×1.5', celebrity: 'Celebrity ×2', heat: 'Heat wave: water rides', rush: 'Rush hour ×3', rain: 'Rain ×0.7', boost: 'Goal bonus: income ×2' };
+  const EFFECT_LABEL = { sunny: 'Sunny ×1.5', celebrity: 'Celebrity ×2', heat: 'Heat wave: water rides', rush: 'Rush hour ×3', rain: 'Rain ×0.7', boost: 'Income ×2', parade: 'Parade: income ×3' };
   let parkFull = false;
   function renderHud(snap) {
     const inc = S.rate.rides + S.rate.gate + S.rate.food;
@@ -1017,7 +1292,7 @@
     $('parkFab').classList.toggle('can', anyCan);
     if (!$('moodModal').hidden) renderMood();
     const chips = [];
-    for (const e of S.effects) if (e.until > S.time && EFFECT_LABEL[e.type]) chips.push(`<span class="chip gold">${EFFECT_LABEL[e.type]} · ${Math.ceil(e.until - S.time)}s</span>`);
+    for (const e of S.effects) if (e.until > S.time && EFFECT_LABEL[e.type]) chips.push(`<span class="chip gold">${EFFECT_LABEL[e.type]} · ${J.duration(Math.ceil(e.until - S.time))}</span>`);
     if (S.builds.length) {
       // only the next build to finish; the map labels show the rest
       const b = S.builds.reduce((a, c) => (c.end < a.end ? c : a));
@@ -1051,6 +1326,7 @@
     sheetOpen = true;
     $('dock').hidden = false;
     $('fabs').hidden = true;
+    $('hypeBtn').hidden = true; $('hypeHint').hidden = true;
     for (const v of ['rides', 'park', 'legacy']) $('view-' + v).hidden = v !== t;
     if (t === 'rides') scrollToSel();
     refresh(true);
@@ -1059,6 +1335,7 @@
     sheetOpen = false;
     $('dock').hidden = true;
     $('fabs').hidden = false;
+    $('hypeBtn').hidden = false;
     $('sellConfirm').hidden = true;
     tab = '';
   }
@@ -1095,6 +1372,7 @@
     const out = J.step(S, dt, rnd);
     for (const i of out.broke) {
       toast(`${J.rideDef(i).name} broke down! Tap Repair.`);
+      Sound.play('breakdown');
       say(`<b>${esc(J.rideDef(i).name)}</b> broke down`, true);
     }
     const snapNow = lastSnap || J.snapshot(S);
@@ -1124,6 +1402,7 @@
       const ev = J.rollEvent(S, rnd);
       const extra = ev.type === 'bus' ? ` ${J.fmt(ev.busVisitors, 0)} guests piled out.` : '';
       toast(ev.title + '!');
+      if (ev.type !== 'rain') Sound.play('event');
       say(`<b>${esc(ev.title)}</b>. ${esc(ev.text)}${extra}`, true);
       if (ev.type === 'bus' && L) spawn(Math.min(40, ev.busVisitors));
     }
@@ -1141,9 +1420,16 @@
 
   function announceBuild(b) {
     const name = b.i !== undefined ? J.rideDef(b.i).name : '';
-    if (b.kind === 'ride') { toast(`${name} is open!`); say(`<b>${esc(name)}</b> opened its gates`, true); if (sel === b.i) refresh(true); }
-    else if (b.kind === 'land') { toast('New land is ready! Room for ' + J.fmt(J.globals(S).capacity) + ' guests.'); say('<b>New land</b> opened', true); }
-    else toast(`${name}: ${b.kind === 'seats' ? 'new seats installed' : 'now runs faster'}`);
+    if (b.kind === 'ride') {
+      say(`<b>${esc(name)}</b> opened its gates`, true);
+      if (!sheetOpen && P3) P3.focus(b.i);
+      setTimeout(() => { const at = rideScreen(b.i); confetti(at.x, at.y, 90, 380); }, sheetOpen ? 0 : 450);
+      banner(J.rideDef(b.i).icon, name + ' is open!', b.i === 0 ? 'Guests are on their way' : 'More fun, more guests');
+      Sound.play('open'); buzz(30);
+      if (sel === b.i) refresh(true);
+    }
+    else if (b.kind === 'land') { Sound.play('done'); toast('New land is ready! Room for ' + J.fmt(J.globals(S).capacity) + ' guests.'); say('<b>New land</b> opened', true); }
+    else { Sound.play('done'); const at = rideScreen(b.i); confetti(at.x, at.y, 20, 220); toast(`${name}: ${b.kind === 'seats' ? 'new seats installed' : 'now runs faster'}`); }
     refresh(true);
   }
   function frame(now) {
@@ -1168,6 +1454,8 @@
     }
     refresh(false);
     draw(dt);
+    renderHype(dt);
+    drawFx(dt);
     if (now - lastSave > 5000) { lastSave = now; save(); }
     if (now - lastCloudSave > 20000) { lastCloudSave = now; cloudSave(); }
     requestAnimationFrame(frame);
@@ -1192,7 +1480,7 @@
       (capped ? ` Offline earnings stop after ${r.hours} h; night security extends that.` : '');
     openModal('welcome');
   }
-  $('welcomeOk').addEventListener('click', () => closeModal('welcome'));
+  $('welcomeOk').addEventListener('click', () => { closeModal('welcome'); Sound.play('gift'); bumpCash(); const at = centerOf($('kCash')); confetti(at.x, at.y + 10, 50, 260); });
 
   // ---------- Account save (Claude link only) ----------
   // Some viewers (the Claude iPhone app) wipe browser storage between visits, so the park is also
@@ -1258,6 +1546,7 @@
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   }
 
+  window.JoylandDebug = { state: () => S }; // for automated tests
   const hot = window.claude && window.claude.hot;
   if (hot && typeof hot.snapshot === 'function') { try { hot.snapshot(() => ({ state: S })); } catch (e) { /* optional */ } }
   if (hot && typeof hot.ready === 'function') hot.ready(start);

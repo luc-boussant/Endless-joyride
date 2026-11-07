@@ -40,3 +40,13 @@ Ad-free amusement park idle game. Playable link: https://claude.ai/artifact/4BjG
 - New rides cost a multiple of the level price (BUILD_MULT table in core.js, ×60–100 for rides 3–5, ×14 mid game, easing for late rides) so a ride costs about what the park earns in half its build time. Seats ×6 and speed ×4 pricier than before; land 600 × 5.2^level.
 - Overtime: any running build can be finished at once for 3× the income of the time saved (rushCost/rushBuild).
 - Bot sim (bot3.js prints, per day, how often crews vs money were the limit): money limits 0–60% of the time depending on the day; ride 12 opens around day 12.
+
+## v3 fun update (2026-11-07, Luc: "the game is bad, make it better")
+Audit: after the first half hour there was almost nothing to do (ride 9 took 28 h to build, income stayed flat for hours, the first sale came after days), there was no sound, and little celebrated progress.
+- Pacing: ride build time 20 s for the first, then 45 s × 1.85^i up to ride 10, then ×1.2 per ride (ride 4 ~9 min, ride 8 ~1.7 h, ride 10 ~6 h). Land 90 s × 1.55^level. Golden tickets = floor(sqrt(lifetime / 1e10)) (was 1e12), so the first sale comes on day one; existing parks get their pending tickets.
+- Megaphone (bottom left): each tap earns half a second of income and fills the ring (20 taps, drains 1.5%/s). A full ring starts a parade: income ×3 for 30 s.
+- Trophies (menu): 30 trophies, each +5% income forever (kept when selling). Counters in `counts` (balloons, parades, taps, repairs).
+- Daily gift (🎁 in the HUD, after 2 min of play): 5 min of income × streak day (up to 7) and income ×2 for 10 min. Streak resets after a missed day.
+- Juice: Web Audio sound effects (no files; Sound on/off in the menu), haptics (vibrate, or the iOS switch trick), confetti and floating numbers on a fixed `#fx` canvas, big banners for ride openings, parades, trophies and gifts, camera flies to a newly opened ride.
+- Bot sim (scratchpad bot2.js, greedy player that keeps levelling): ride 5 ~1 h, ride 8 ~4 h, ride 9 ~8 h, first golden ticket ~3 h of play.
+- Saves: same key `endless-joyland-v2`; `migrate` fills the new fields.
