@@ -181,6 +181,45 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
   .sheet { max-height: 100%; border-radius: 22px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
   .fabs { bottom: 20px; right: 20px; }
 }
+
+/* v3: megaphone, effects layer, banners, trophies, daily gift */
+canvas#fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 16; }
+.hype { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); width: 68px; height: 68px; border-radius: 50%; border: 3px solid transparent; padding: 0; z-index: 5; display: grid; place-items: center; font-size: 30px; touch-action: manipulation;
+  background: conic-gradient(var(--candy) calc(var(--p, 0) * 1turn), rgba(255, 255, 255, .14) 0) border-box; box-shadow: 0 6px 20px rgba(0, 0, 0, .3); }
+.hype::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: rgba(16, 21, 48, .9); }
+.hype .ic { position: relative; transition: transform .06s; }
+.hype.hit .ic { transform: scale(1.25) rotate(-12deg); }
+.hype .tm { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); background: var(--gold); color: #2a1c00; font-weight: 800; font-size: 11px; padding: 0 7px; border-radius: 8px; line-height: 17px; white-space: nowrap; }
+.hype.parade { background: conic-gradient(var(--gold) calc(var(--p, 0) * 1turn), rgba(255, 201, 74, .25) 0) border-box; animation: glow .5s ease-in-out infinite alternate; }
+@keyframes glow { from { box-shadow: 0 0 10px rgba(255, 201, 74, .5); } to { box-shadow: 0 0 28px rgba(255, 201, 74, .95); } }
+.hint { position: absolute; left: max(88px, calc(env(safe-area-inset-left, 0px) + 78px)); bottom: max(34px, calc(env(safe-area-inset-bottom, 0px) + 20px)); z-index: 5; background: var(--ink); color: var(--night); font-weight: 800; font-size: 12.5px; padding: 5px 10px; border-radius: 10px; pointer-events: none; animation: nudge 1s ease-in-out infinite alternate; }
+.hint::before { content: ""; position: absolute; left: -6px; top: 50%; margin-top: -6px; border: 6px solid transparent; border-left: 0; border-right-color: var(--ink); }
+@keyframes nudge { to { transform: translateX(6px); } }
+.giftbtn { font-size: 22px; animation: wobble 1.2s ease-in-out infinite; background: rgba(255, 77, 109, .9); border: 0; }
+@keyframes wobble { 0%, 100% { transform: rotate(0); } 10% { transform: rotate(-14deg) scale(1.1); } 20% { transform: rotate(12deg) scale(1.1); } 30% { transform: rotate(0); } }
+.cashpill .val.bump { animation: bump .45s ease-out; }
+@keyframes bump { 30% { transform: scale(1.18); color: #fff; } }
+.banner { position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%); z-index: 17; pointer-events: none; text-align: center; width: min(92vw, 420px); animation: bannerIn 2.8s ease-out forwards; }
+.banner .bi { font-size: 54px; line-height: 1; filter: drop-shadow(0 4px 12px rgba(0,0,0,.5)); }
+.banner .bt { font-family: var(--display); font-size: 26px; line-height: 1.1; color: var(--gold); text-shadow: 0 3px 0 #7a4a00, 0 0 24px rgba(255, 201, 74, .7); margin-top: 6px; }
+.banner .bs { margin-top: 6px; font-weight: 800; font-size: 14px; color: var(--ink); text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+@keyframes bannerIn { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } 20% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -62%) scale(1); } }
+.trow { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+.trow .ti { font-size: 24px; text-align: center; grid-row: span 2; }
+.trow b { font-size: 13px; }
+.trow .tv { font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; }
+.trow .gprog { grid-column: 2 / -1; }
+.trow.locked .ti { filter: grayscale(1); opacity: .45; }
+.trow.done { border-color: var(--gold); background: linear-gradient(rgba(255, 201, 74, .12), rgba(255, 201, 74, .03)); }
+.trow.done .tv { color: var(--gold); }
+.tlist { display: grid; gap: 6px; max-height: 58dvh; overflow-y: auto; overscroll-behavior: contain; }
+.streak { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.streak div { border-radius: 10px; padding: 6px 0; text-align: center; background: var(--night); border: 1px solid var(--line); font-size: 11px; font-weight: 800; color: var(--muted); }
+.streak div.on { background: var(--candy); border-color: var(--candy); color: #fff; }
+.streak div.now { background: var(--gold); border-color: var(--gold); color: #2a1c00; transform: scale(1.08); }
+.trophybtn { display: flex; align-items: center; gap: 10px; text-align: left; width: 100%; }
+.trophybtn .big { font-size: 22px; }
+@media (prefers-reduced-motion: reduce) { .banner, .hint, .giftbtn, .hype.parade, .cashpill .val.bump { animation-duration: .01s; animation-iteration-count: 1; } }
 </style>
 
 <div class="app">
@@ -195,12 +234,15 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       <span class="sub"><b id="kInc">$0/s</b> · <span id="kVis">0</span> guests</span>
     </button>
     <div class="hudbtns">
+      <button class="round giftbtn" id="giftBtn" aria-label="Daily gift" hidden>🎁</button>
       <button class="round goalbtn" id="goalbar" aria-label="Goals"><span aria-hidden="true">★</span></button>
       <button class="round glass" id="moodBtn" aria-label="Guest mood"><span id="kMood">😄</span></button>
     </div>
     <div class="chips" id="chips"></div>
   </header>
 
+  <button class="hype" id="hypeBtn" aria-label="Megaphone: tap to hype the crowd. A full ring starts a parade."><span class="ic" aria-hidden="true">📣</span><span class="tm" id="hypeTm" hidden></span></button>
+  <div class="hint" id="hypeHint" hidden>Tap to hype the crowd!</div>
   <nav class="fabs" id="fabs">
     <button class="fab glass" data-tab="park" id="parkFab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"/></svg>Park</button>
     <button class="fab glass" data-tab="legacy" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="badge" id="legacyBadge" hidden></span></button>
@@ -220,6 +262,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
       </div>
 
       <div class="view" id="view-legacy" hidden>
+        <button class="panel trophybtn" id="trophyOpen"><span class="big">🏆</span><span><b id="trophyCount">Trophies</b><br><span class="small" id="trophySub"></span></span></button>
         <h3 class="sectionh">Golden tickets</h3>
         <div class="panel legacytop">
           <div><div class="big" id="tixHave">0</div><div class="small">tickets</div></div>
@@ -233,7 +276,7 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
         <div class="tiles" id="perkTiles"></div>
         <h3 class="sectionh"><span id="parkNo">Park 1</span> stats</h3>
         <div class="panel"><div class="statgrid" id="statGrid"></div></div>
-        <div class="rowbtns"><button class="plain" id="saveOpen">Save code</button><button class="plain" id="helpOpen">How to play</button><button class="plain danger" id="resetOpen">Erase</button></div>
+        <div class="rowbtns"><button class="plain" id="saveOpen">Save code</button><button class="plain" id="helpOpen">How to play</button><button class="plain" id="soundBtn">Sound: on</button><button class="plain danger" id="resetOpen">Erase</button></div>
         <div class="small" style="padding-inline:2px">Game version __VERSION__</div>
       </div>
     </div>
@@ -241,6 +284,24 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
 </div>
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div id="banners" aria-live="polite"></div>
+<div class="modal" id="trophyModal" hidden>
+  <div class="panel">
+    <h2>Trophies</h2>
+    <div class="small" id="trophyIntro"></div>
+    <div class="tlist" id="trophyList"></div>
+    <div class="rowbtns"><button class="plain go" id="trophyClose">Close</button></div>
+  </div>
+</div>
+<div class="modal" id="giftModal" hidden>
+  <div class="panel">
+    <h2>Daily gift</h2>
+    <div class="small" id="giftText"></div>
+    <div class="streak" id="giftStreak"></div>
+    <div class="rowbtns"><button class="plain go" id="giftOpen">Open the gift</button><button class="plain" id="giftLater">Later</button></div>
+  </div>
+</div>
 
 <div class="modal" id="welcome" hidden>
   <div class="panel"><h2>Welcome back</h2><p style="margin:0" id="welcomeText"></p><div class="rowbtns"><button class="plain go" id="welcomeOk">Collect</button></div></div>
@@ -282,11 +343,13 @@ textarea { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid
     <h2>How to play</h2>
     <div class="small" style="font-size:13px;line-height:1.5;color:var(--ink)">
       Build rides on the lots and level them up. More fun brings more guests, and guests pay for every ride.<br>
+      Tap the 📣 megaphone to hype the crowd: every tap earns a little, and a full ring starts a parade that triples your income for 30 s.<br>
+      Trophies (in the menu) each add 5% income forever, even after you sell the park. Come back every day for a gift that grows with your streak.<br>
       Building takes real time: a few minutes for the first rides, hours and then days for the big ones. Each builder crew works on one thing at a time (new rides, seats, speed, land), and construction carries on while you are away. In a hurry? Pay the crew overtime to finish a build now (it costs 3× what the park earns in the time saved).<br>
       Busy rides grow queues. Add seats or speed them up, or the crowd gets grumpy and stops coming.<br>
       Rides sometimes break down. Tap Repair, or wait for the mechanics. Hire more mechanics to make it rarer.<br>
       Drag the park to look around, pinch to zoom and twist with two fingers to turn it. Tap a ride to manage it.<br>
-      After $1 T in total earnings, sell your park for golden tickets: permanent bonuses for every park after.
+      After $10 B in total earnings, sell your park for golden tickets: permanent bonuses for every park after. The more you earn, the more tickets you get.
     </div>
     <div class="rowbtns"><button class="plain go" id="helpClose">Got it</button></div>
   </div>

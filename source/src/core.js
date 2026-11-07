@@ -10,7 +10,8 @@
   const SEAT_GROWTH = 1.32;
   const SPEED_GROWTH = 2.2;
   const MAX_SPEED = 12;
-  const TICKET_SCALE = 1e12;  // golden tickets = floor(sqrt(lifetime / TICKET_SCALE))
+  const TICKET_SCALE = 1e10;  // golden tickets = floor(sqrt(lifetime / TICKET_SCALE)); v3 lowered it from 1e12 so the first sale comes on day one
+  const SUFFIX = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'UDc', 'DDc', 'TDc', 'QaDc', 'QiDc', 'SxDc', 'SpDc', 'OcDc', 'NoDc', 'Vg'];
   let clock = () => Date.now(); // wall clock for construction timers (tests swap it)
 
   // [name, icon, seats, cycle seconds, water ride, 3D model]
@@ -101,6 +102,71 @@
     { name: 'Showrunner', desc: 'Tickets ×2 and fun ×1.5', cost: 3e6 },
   ];
 
+  // ---------- Trophies (kept forever, each one adds income to every park) ----------
+  const TROPHY_BONUS = 0.05;
+  const maxLvl = s => s.rides.reduce((a, r) => Math.max(a, r.lvl || 0), 0);
+  const openRides = s => s.rides.filter(r => r.lvl).length;
+  const TROPHIES = [
+    ...[[1, 'Opening day', '🎠'], [3, 'Little fair', '🎪'], [6, 'Real theme park', '🎡'], [9, 'Thrill capital', '🎢'], [12, 'Mega resort', '🏰'], [16, 'Endless park', '♾️']]
+      .map(([n, name, icon]) => ({ id: 'rides' + n, icon, name, desc: `Have ${n} ride${n > 1 ? 's' : ''} open in one park`, val: openRides, target: n })),
+    ...[[1e3, 'Crowd pleaser'], [1e5, 'Household name'], [1e7, 'Pilgrimage site']]
+      .map(([n, name]) => ({ id: 'guests' + n, icon: '👪', name, desc: `Welcome ${round(n)} guests in total`, val: s => s.totalVisitors, target: n })),
+    ...[[1e3, 'Pocket money'], [1e6, 'Millionaire minute'], [1e9, 'Money printer'], [1e12, 'Golden goose']]
+      .map(([n, name]) => ({ id: 'inc' + n, icon: '💰', name, desc: `Earn $${round(n)} a second`, val: s => s.bestIncome, target: n })),
+    ...[[25, 'Fine tuning'], [100, 'Polished'], [250, 'Masterpiece']]
+      .map(([n, name]) => ({ id: 'lvl' + n, icon: '⭐', name, desc: `Get a ride to level ${n}`, val: maxLvl, target: n })),
+    ...[[10, 'Go-getter'], [50, 'Overachiever'], [200, 'Unstoppable']]
+      .map(([n, name]) => ({ id: 'goals' + n, icon: '🎯', name, desc: `Finish ${n} goals`, val: s => s.goalsDone, target: n })),
+    ...[[10, 'Balloon chaser'], [100, 'Balloon hunter']]
+      .map(([n, name]) => ({ id: 'balloons' + n, icon: '🎈', name, desc: `Pop ${n} golden balloons`, val: s => s.counts.balloons, target: n })),
+    ...[[1, 'First parade'], [25, 'Party animal'], [200, 'Carnival king']]
+      .map(([n, name]) => ({ id: 'parades' + n, icon: '📣', name, desc: n > 1 ? `Start ${n} parades` : 'Start a parade with the megaphone', val: s => s.counts.parades, target: n })),
+    { id: 'staff', icon: '🎩', name: 'Dream team', desc: 'Fully staff a ride (3 stars)', val: s => s.rides.reduce((a, r) => Math.max(a, r.mgr || 0), 0), target: 3 },
+    { id: 'land5', icon: '🗺️', name: 'Land baron', desc: 'Buy land 5 times in one park', val: s => s.park.land, target: 5 },
+    { id: 'happy', icon: '😄', name: 'Happiest place', desc: 'Keep 200 guests happy at once', val: s => (s.satisfaction > 0.9 ? s.inPark : 0), target: 200 },
+    ...[[1, 'New owner'], [5, 'Serial founder']]
+      .map(([n, name]) => ({ id: 'sold' + n, icon: '🎟️', name, desc: n > 1 ? `Sell ${n} parks` : 'Sell your park for golden tickets', val: s => s.parkNumber - 1, target: n })),
+    { id: 'streak7', icon: '🎁', name: 'Regular', desc: 'Collect the daily gift 7 days in a row', val: s => s.dailyBest || 0, target: 7 },
+  ];
+  function round(n) { return fmt(n).replace(/\.0+ /, ' '); }
+  function trophyInfo(s, t) { return { value: Math.min(t.target, t.val(s) || 0), target: t.target, done: s.trophies.includes(t.id) }; }
+  // Unlocks every trophy that is now reached; returns the new ones so the UI can celebrate.
+  function checkTrophies(s) {
+    const got = [];
+    for (const t of TROPHIES) if (!s.trophies.includes(t.id) && (t.val(s) || 0) >= t.target) { s.trophies.push(t.id); got.push(t); }
+    return got;
+  }
+
+  // ---------- Hype: tap the megaphone to earn a little and fill the meter; a full meter starts a parade ----------
+  const HYPE_TAPS = 20, HYPE_DECAY = 0.015, PARADE_SECONDS = 30, PARADE_MULT = 3;
+  function income(s) { return s.rate.rides + s.rate.gate + s.rate.food; }
+  function tapHype(s) {
+    const parade = hasEffect(s, 'parade');
+    const cash = Math.max(1, income(s) * 0.5);
+    s.cash += cash; s.runEarned += cash; s.lifetimeEarned += cash;
+    s.counts.taps++;
+    let started = false;
+    if (!parade) {
+      s.hype = Math.min(1, (s.hype || 0) + 1 / HYPE_TAPS);
+      if (s.hype >= 0.999) { s.hype = 0; s.effects.push({ type: 'parade', until: s.time + PARADE_SECONDS }); s.counts.parades++; started = true; }
+    }
+    return { cash, parade: started };
+  }
+
+  // ---------- Daily gift: once a calendar day, bigger with every day in a row ----------
+  function dailyReady(s, today) { return s.dailyLast !== today && s.rides.some(r => r.lvl) && s.time > 120; }
+  function dailyPrize(s, streak) { return Math.max(100, income(s) * 300 * Math.min(streak, 7)); }
+  function nextStreak(s, yesterday) { return s.dailyLast === yesterday ? (s.dailyStreak || 0) + 1 : 1; }
+  function claimDaily(s, today, yesterday) {
+    if (!dailyReady(s, today)) return null;
+    const streak = nextStreak(s, yesterday);
+    const prize = dailyPrize(s, streak);
+    s.dailyLast = today; s.dailyStreak = streak; s.dailyBest = Math.max(s.dailyBest || 0, streak);
+    s.cash += prize; s.runEarned += prize; s.lifetimeEarned += prize;
+    s.effects.push({ type: 'boost', until: s.time + 600 });
+    return { streak, prize };
+  }
+
   // ---------- Decorations ----------
   // What the map shows, derived from the park upgrades that pay for it.
   function decorView(s) {
@@ -138,9 +204,15 @@
       rate: { rides: 0, gate: 0, food: 0, arrivals: 0 },
       lastSeen: Date.now(),
       created: Date.now(),
+      hype: 0,
+      trophies: [],         // ids of TROPHIES unlocked, kept forever
+      counts: { balloons: 0, parades: 0, taps: 0, repairs: 0 },
+      dailyLast: '', dailyStreak: 0, dailyBest: 0,
     };
     if (keep) {
-      for (const k of ['lifetimeEarned', 'ticketsEarned', 'ticketsSpent', 'totalVisitors', 'bestIncome', 'created', 'goalsDone']) s[k] = keep[k];
+      for (const k of ['lifetimeEarned', 'ticketsEarned', 'ticketsSpent', 'totalVisitors', 'bestIncome', 'created', 'goalsDone', 'dailyLast', 'dailyStreak', 'dailyBest']) s[k] = keep[k];
+      s.trophies = (keep.trophies || []).slice();
+      s.counts = Object.assign({}, s.counts, keep.counts);
       s.perks = Object.assign({}, s.perks, keep.perks);
       s.parkNumber = (keep.parkNumber || 1) + 1;
       s.cash = 15 + seedCash(s.perks.seed);
@@ -158,6 +230,9 @@
     s.park = Object.assign(newState().park, raw.park || {});
     s.perks = Object.assign(newState().perks, raw.perks || {});
     s.rate = Object.assign(newState().rate, raw.rate || {});
+    s.counts = Object.assign(newState().counts, raw.counts || {});
+    if (!Array.isArray(s.trophies)) s.trophies = [];
+    if (!isFinite(s.hype)) s.hype = 0;
     if (raw.decor && !(raw.park && raw.park.gardens !== undefined)) s.park.gardens = (raw.decor.flowers || 0) + (raw.decor.fountain || 0);
     for (const k of Object.keys(s.park)) if (!(k in newState().park)) delete s.park[k];
     delete s.decor;
@@ -177,7 +252,7 @@
   function globals(s) {
     const t = s.ticketsEarned; // every ticket ever earned counts, spent or not
     return {
-      incomeMult: (1 + 0.03 * t) * (hasEffect(s, 'boost') ? 2 : 1),
+      incomeMult: (1 + 0.03 * t) * (1 + TROPHY_BONUS * (s.trophies ? s.trophies.length : 0)) * (hasEffect(s, 'boost') ? 2 : 1) * (hasEffect(s, 'parade') ? PARADE_MULT : 1),
       arrivalMult: (1 + 0.12 * s.park.mascot) * (1 + 0.25 * s.perks.fame) * (1 + 0.01 * t),
       decorFun: 1 + 0.06 * s.park.gardens,
       tolerance: BASE_TOLERANCE + 15 * s.park.comfort + 20 * s.perks.patience,
@@ -277,10 +352,11 @@
     const g = globals(s);
     const r = i !== undefined ? s.rides[i] : null;
     let t;
-    if (kind === 'ride') t = i <= 10 ? 60 * Math.pow(2.3, i) : 60 * Math.pow(2.3, 10) * Math.pow(1.25, i - 10);
+    // v3: much gentler than v2 (ride 9 took 28 h): ride 4 ~9 min, ride 8 ~1.7 h, ride 10 ~6 h, then +20% per ride
+    if (kind === 'ride') t = i === 0 ? 20 : i <= 10 ? 45 * Math.pow(1.85, i) : 45 * Math.pow(1.85, 10) * Math.pow(1.2, i - 10);
     else if (kind === 'seats') t = 25 * (1 + i) * Math.pow(1.35, r.cap);
     else if (kind === 'speed') t = 60 * (1 + i) * Math.pow(1.5, r.spd);
-    else t = 120 * Math.pow(1.7, s.park.land);
+    else t = 90 * Math.pow(1.55, s.park.land);
     return Math.round(t * g.buildMult);
   }
   function buildFor(s, kind, i) { return s.builds.find(b => b.kind === kind && b.i === i); }
@@ -330,7 +406,7 @@
   }
   function buySeats(s, i) { return startBuild(s, 'seats', i, seatCost(s, i)); }
   function buySpeed(s, i) { return s.rides[i].spd < MAX_SPEED && startBuild(s, 'speed', i, speedCost(s, i)); }
-  function repair(s, i) { const r = s.rides[i]; if (!(r.broken > 0)) return false; r.broken = 0; return true; }
+  function repair(s, i) { const r = s.rides[i]; if (!(r.broken > 0)) return false; r.broken = 0; s.counts.repairs++; return true; }
   function buyManager(s, i) { if (!s.rides[i].lvl || !spend(s, managerCost(s, i))) return false; s.rides[i].mgr++; return true; }
   function buyPark(s, id) {
     if (id === 'land') return startBuild(s, 'land', undefined, parkCost(s, id));
@@ -527,6 +603,7 @@
     s.totalVisitors += arrivals; s.runVisitors += arrivals;
     s.time += dt;
     s.effects = s.effects.filter(e => e.until > s.time);
+    if (s.hype > 0) s.hype = Math.max(0, s.hype - HYPE_DECAY * dt);
 
     const a = Math.min(1, dt / 5);
     s.rate.rides += (rideMoney / dt - s.rate.rides) * a;
@@ -596,6 +673,7 @@
 
   function popBalloon(s, rnd) {
     const inc = s.rate.rides + s.rate.gate + s.rate.food;
+    s.counts.balloons++;
     if (s.builds.length && rnd() < 0.25) {
       rushBuilds(s, 300);
       return { kind: 'coffee' };
@@ -610,7 +688,6 @@
   }
 
   // ---------- Formatting ----------
-  const SUFFIX = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'UDc', 'DDc', 'TDc', 'QaDc', 'QiDc', 'SxDc', 'SpDc', 'OcDc', 'NoDc', 'Vg'];
   function fmt(n, digits) {
     if (!isFinite(n)) return '∞';
     if (n < 0) return '-' + fmt(-n, digits);
@@ -633,6 +710,8 @@
 
   root.Joyland = {
     STAY, RIDE_EVERY, MAX_SPEED, TICKET_SCALE, PARK_UPGRADES, PERKS, EVENTS, MANAGERS, decorView,
+    TROPHIES, TROPHY_BONUS, trophyInfo, checkTrophies, HYPE_TAPS, PARADE_SECONDS, PARADE_MULT, tapHype, income,
+    dailyReady, dailyPrize, nextStreak, claimDaily,
     setClock: f => { clock = f; }, now: () => clock(), buildTime, buildFor, busyCrews, canBuild, processBuilds, rushBuilds, rushCost, rushBuild, repair,
     managerCost, buyManager, checkGoals, goalInfo,
     rideDef, milestonesPassed, nextMilestone, newState, migrate, globals, rideStats, snapshot, priceLabel,
